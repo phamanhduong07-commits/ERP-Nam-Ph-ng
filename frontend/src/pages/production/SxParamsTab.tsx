@@ -146,7 +146,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   // Khi đổi hướng sóng, tính lại chiều khổ tối ưu theo hướng mới
   useEffect(() => {
     const daiKH = baseDims?.dai_ke_hoach ?? 0
-    const eff = nguocSong ? daiKH : (baseDims?.kho_ke_hoach ?? 0)
+    const eff = nguocSong ? daiKH : effectiveKhoKeHoach
     if (eff <= 0) return
     const beN = Math.max(1, beConBe)
     const soDaoBase = Math.max(1, Math.floor(180 / (eff * beN)))
@@ -175,15 +175,21 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const kho1         = baseDims?.kho1 ?? 0
   // Khổ kế hoạch mỗi con (theo tài liệu hệ thống giai đoạn 1)
   const khoKeHoach   = baseDims?.kho_ke_hoach ?? 0
+  // Nếu QCCL hợp lệ (3 phần, tất cả > 0) → dùng tổng QCCL làm khổ kế hoạch/con
+  const qcclParts = qccl.split('+').map(p => parseFloat(p.trim()))
+  const qcclSum = (qcclParts.length === 3 && qcclParts.every(p => !isNaN(p) && p > 0))
+    ? Math.round(qcclParts.reduce((a, b) => a + b, 0) * 10) / 10
+    : null
+  const effectiveKhoKeHoach = qcclSum ?? khoKeHoach
   // Khổ giấy lý thuyết tính đúng với be_so_con và hướng chạy — dùng cho hint "Mặc định"
   const defaultKhoTt = useMemo(() => {
     const daiKH = baseDims?.dai_ke_hoach ?? 0
-    const eff = nguocSong ? daiKH : khoKeHoach
+    const eff = nguocSong ? daiKH : effectiveKhoKeHoach
     if (!baseDims || eff <= 0) return baseDims?.kho_tt ?? 0
     const beN = Math.max(1, beConBe)
     const soDaoBase = Math.max(1, Math.floor(180 / (eff * beN)))
     return Math.ceil((eff * beN * soDaoBase + 1.8) / 5) * 5
-  }, [baseDims, khoKeHoach, beConBe, nguocSong])
+  }, [baseDims, effectiveKhoKeHoach, beConBe, nguocSong])
   const daiKeHoach   = baseDims?.dai_ke_hoach ?? 0
   const daiTtFormula = baseDims?.dai_tt ?? 0
   const [daiTt, setDaiTt] = useState<number>(
@@ -195,7 +201,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   // Ngược sóng: chiều rộng mỗi con ↔ chiều dài máy đổi chỗ nhau
   // effectivePieceWidth: chiều ngang máy cho mỗi con (để tính số dao)
   // effectiveDaiTt:      chiều cắt thực tế máy chạy (để hiển thị & lưu)
-  const effectivePieceWidth = nguocSong ? daiKeHoach : khoKeHoach
+  const effectivePieceWidth = nguocSong ? daiKeHoach : effectiveKhoKeHoach
   const effectiveDaiTt      = nguocSong ? kho1 : daiTt
   // Số dao dựa trên chiều rộng mỗi con theo hướng máy đang chạy
   // beConBe > 1: khuôn bế chiếm beConBe × effectivePieceWidth mỗi nhát
@@ -235,7 +241,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   // Khổ thực tế phân cho mỗi con (dùng cho tính KG): khổ giấy ÷ tổng số con theo chiều ngang
   const khoMoiCon = (soDaoCurrent > 0 && khoTt > 0) ? khoTt / (soDaoCurrent * beConBe) : kho1
   // Chiều rộng mỗi con hiển thị (thay đổi khi chạy ngược sóng)
-  const displayPieceWidth = nguocSong ? daiKeHoach : khoKeHoach
+  const displayPieceWidth = nguocSong ? daiKeHoach : effectiveKhoKeHoach
 
   // Tính rows — dùng kho1 (quy cách tấm thực tế) * daiTt làm diện tích
   const tableRows: LayerRow[] = useMemo(() =>
@@ -715,8 +721,8 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                       onChange={(v: number) => {
                         markDirty()
                         setBeConBe(v)
-                        // Auto-cập nhật khổ giấy tối thiểu: kho_ke_hoach × N + viền
-                        if (khoKeHoach > 0) setKhoTt(Math.ceil((khoKeHoach * v + 1.8) / 5) * 5)
+                        // Auto-cập nhật khổ giấy tối thiểu: effectiveKhoKeHoach × N + viền
+                        if (effectiveKhoKeHoach > 0) setKhoTt(Math.ceil((effectiveKhoKeHoach * v + 1.8) / 5) * 5)
                       }}
                       options={[1, 2, 3, 4, 6, 8].map(n => ({ value: n, label: `${n} con` }))}
                     />

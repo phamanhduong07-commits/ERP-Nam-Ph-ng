@@ -1,3 +1,4 @@
+import dayjs from 'dayjs'
 import type { HoaDonDienTu, HoaDonItem } from '../api/hoaDonDienTu'
 import type { PrintCompanyInfo } from './exportUtils'
 
@@ -283,7 +284,7 @@ export function printHoaDonDienTu(hdt: HoaDonDienTu, company?: PrintCompanyInfo)
         <div style="margin-top:8px;border:2px solid #2e7d32;padding:6px 10px;display:inline-block;text-align:left;font-size:8.5pt;color:#2e7d32;">
           <b>Signature Valid</b><br/>
           Ký bởi <i>(Signed By)</i>: <b>${phapNhan?.ten ?? ''}</b><br/>
-          Ký ngày <i>(Signing Date)</i>: ${new Date(hdt.ngay_lap).toLocaleDateString('vi-VN')}
+          Ký ngày <i>(Signing Date)</i>: ${dayjs(hdt.ngay_lap).format('DD/MM/YYYY')}
         </div>` : '<div class="sig-name"></div>'}
       </td>
     </tr>

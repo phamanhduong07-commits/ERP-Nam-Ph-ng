@@ -1215,6 +1215,7 @@ def list_all_phieu_nhap_phoi_song(
     den_ngay: date | None = None,
     production_order_id: int | None = None,
     warehouse_id: int | None = None,
+    phan_xuong_id: int | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -1236,12 +1237,16 @@ def list_all_phieu_nhap_phoi_song(
         q = q.filter(PhieuNhapPhoiSong.production_order_id == production_order_id)
     if warehouse_id:
         q = q.filter(PhieuNhapPhoiSong.warehouse_id == warehouse_id)
+    if phan_xuong_id:
+        subq = db.query(ProductionOrder.id).filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
+        q = q.filter(PhieuNhapPhoiSong.production_order_id.in_(subq))
     phieus = q.order_by(PhieuNhapPhoiSong.ngay.desc(), PhieuNhapPhoiSong.id.desc()).all()
 
     result = []
     for p in phieus:
         base = _phieu_to_dict(p)
         base["so_lenh"] = p.production_order.so_lenh if p.production_order else None
+        base["phan_xuong_id"] = p.production_order.phan_xuong_id if p.production_order else None
         base["ten_kho"] = p.warehouse.ten_kho if p.warehouse else None
         base["created_by_name"] = (
             getattr(p.creator, "ho_ten", None) or getattr(p.creator, "username", None)

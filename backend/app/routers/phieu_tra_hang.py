@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
@@ -434,6 +435,190 @@ def confirm_phieu(
 
     p = _load_with_relations(db, phieu_id)
     return _phieu_to_dict(p)
+
+
+def _render_print_html(p: PhieuTraHang) -> str:
+    kh = p.customer
+    order = p.production_order
+    wh = p.warehouse
+
+    ten_khach = (kh.ten_viet_tat or kh.ten_kh) if kh else ""
+    so_lenh = order.so_lenh if order else ""
+    ten_kho = wh.ten_kho if wh else ""
+
+    ngay = p.ngay
+    ngay_str = f"Ngày {ngay.day} tháng {ngay.month} năm {ngay.year}" if ngay else ""
+
+    is_phoi = p.loai_hang == "PHOI"
+    loai_label = "Phôi (giấy tấm)" if is_phoi else "Thành phẩm"
+
+    tong_tien = Decimal("0")
+    rows_html = ""
+    for i, it in enumerate(p.items, 1):
+        if is_phoi:
+            kho_s = f"{float(it.chieu_kho):.0f}" if it.chieu_kho else ""
+            cat_s = f"{float(it.chieu_cat):.0f}" if it.chieu_cat else ""
+            ten_hang = f"{kho_s}×{cat_s}" if kho_s and cat_s else (kho_s or cat_s or "—")
+            kich_thuoc_cells = f"<td class='center'>{kho_s}</td><td class='center'>{cat_s}</td>"
+        else:
+            ten_hang = (it.product.ten_hang if it.product else "") or ""
+            kich_thuoc_cells = ""
+
+        don_gia = it.don_gia or Decimal("0")
+        thanh_tien = don_gia * it.so_luong
+        tong_tien += thanh_tien
+        tinh_trang_label = "Tốt" if it.tinh_trang == "tot" else "Lỗi"
+
+        don_gia_str = f"{float(don_gia):,.0f}" if don_gia else "—"
+        thanh_tien_str = f"{float(thanh_tien):,.0f}" if thanh_tien else "—"
+
+        rows_html += (
+            f"<tr><td class='center'>{i}</td><td>{ten_hang}</td>"
+            f"{kich_thuoc_cells}"
+            f"<td class='right'>{it.so_luong:,}</td>"
+            f"<td class='center'>{it.don_vi or ''}</td>"
+            f"<td class='center'>{tinh_trang_label}</td>"
+            f"<td class='right'>{don_gia_str}</td>"
+            f"<td class='right'>{thanh_tien_str}</td></tr>"
+        )
+
+    th_extra = "<th>Khổ (mm)</th><th>Cắt (mm)</th>" if is_phoi else ""
+    colspan_total = 7 if is_phoi else 5
+    tong_tien_str = f"{float(tong_tien):,.0f}"
+    so_lenh_row = (
+        f"<div class='row'><span class='label'>Lệnh SX:</span>"
+        f"<span class='dots'>&nbsp;{so_lenh}</span></div>"
+    ) if so_lenh else ""
+    ghi_chu_block = (
+        f"<div style='font-size:10pt;margin-bottom:8px'>"
+        f"<em>Ghi chú: {p.ghi_chu}</em></div>"
+    ) if p.ghi_chu else ""
+
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Phiếu trả hàng {p.so_phieu}</title>
+<style>
+  @page {{ size: A4 portrait; margin: 15mm 12mm; }}
+  body {{ font-family: 'Times New Roman', serif; font-size: 11pt; color: #000; margin: 0; }}
+  .no-print {{ margin-bottom: 12px; }}
+  @media print {{ .no-print {{ display: none; }} }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }}
+  .company-name {{ font-weight: bold; font-size: 12pt; color: #E65100; }}
+  .company-info {{ font-size: 8.5pt; line-height: 1.5; }}
+  .mau {{ font-size: 8pt; text-align: right; color: #555; }}
+  hr.divider {{ border: none; border-top: 2px solid #E65100; margin: 6px 0 10px; }}
+  .title {{ text-align: center; margin-bottom: 10px; }}
+  .title h2 {{ font-size: 16pt; font-weight: bold; letter-spacing: 2px; margin: 0; text-transform: uppercase; }}
+  .title .so {{ font-size: 9pt; margin-top: 4px; }}
+  .title .date {{ font-size: 9pt; font-style: italic; }}
+  .info-block {{ font-size: 10.5pt; line-height: 1.9; margin-bottom: 10px; }}
+  .row {{ display: flex; margin: 3px 0; }}
+  .row .label {{ min-width: 140px; font-weight: bold; flex-shrink: 0; }}
+  .row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-bottom: 1px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10pt; }}
+  th {{ background: #E65100; color: #fff; border: 1px solid #ccc; padding: 5px 4px; text-align: center; }}
+  td {{ border: 1px solid #ccc; padding: 4px; }}
+  .total-row td {{ font-weight: bold; background: #FFF3E0; }}
+  .center {{ text-align: center; }}
+  .right {{ text-align: right; }}
+  .sig-table {{ width: 100%; border-collapse: collapse; margin-top: 30px; }}
+  .sig-table td {{ border: none; text-align: center; vertical-align: top; width: 33%; padding: 0; }}
+  .sig-label {{ font-weight: bold; }}
+  .sig-sub {{ font-style: italic; font-size: 8.5pt; color: #555; }}
+  .sig-name {{ margin-top: 40px; font-weight: bold; }}
+</style>
+</head>
+<body>
+<div class="no-print">
+  <button onclick="window.print()" style="padding:6px 18px;font-size:13px;cursor:pointer;">🖨️ In phiếu</button>
+</div>
+
+<div class="header">
+  <div>
+    <div class="company-name">CÔNG TY TNHH NAM PHƯƠNG BAO BÌ</div>
+    <div class="company-info">
+      TP. Hồ Chí Minh<br>
+      MST: 0301234567
+    </div>
+  </div>
+  <div class="mau">Mẫu nội bộ</div>
+</div>
+<hr class="divider">
+
+<div class="title">
+  <h2>Phiếu khách trả hàng</h2>
+  <div class="so">Số: <strong>{p.so_phieu}</strong></div>
+  <div class="date">{ngay_str}</div>
+</div>
+
+<div class="info-block">
+  <div class="row"><span class="label">Khách hàng:</span><span class="dots">&nbsp;{ten_khach}</span></div>
+  <div class="row"><span class="label">Loại hàng:</span><span class="dots">&nbsp;{loai_label}</span></div>
+  {so_lenh_row}
+  <div class="row"><span class="label">Kho nhận:</span><span class="dots">&nbsp;{ten_kho}</span></div>
+  <div class="row"><span class="label">Người giao:</span><span class="dots">&nbsp;{p.nguoi_giao or ''}</span></div>
+  <div class="row"><span class="label">Lý do trả:</span><span class="dots">&nbsp;{p.ly_do_tra or ''}</span></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:30px">STT</th>
+      <th>Tên hàng / Sản phẩm</th>
+      {th_extra}
+      <th style="width:65px">Số lượng</th>
+      <th style="width:50px">ĐVT</th>
+      <th style="width:65px">Tình trạng</th>
+      <th style="width:95px">Đơn giá</th>
+      <th style="width:100px">Thành tiền</th>
+    </tr>
+  </thead>
+  <tbody>
+    {rows_html}
+    <tr class="total-row">
+      <td colspan="{colspan_total}" class="right">TỔNG CỘNG</td>
+      <td class="right">{tong_tien_str}</td>
+    </tr>
+  </tbody>
+</table>
+
+{ghi_chu_block}
+
+<table class="sig-table">
+  <tr>
+    <td>
+      <div class="sig-label">Người giao hàng</div>
+      <div class="sig-sub">(Ký, họ tên)</div>
+      <div class="sig-name">{p.nguoi_giao or ''}</div>
+    </td>
+    <td>
+      <div class="sig-label">Thủ kho</div>
+      <div class="sig-sub">(Ký, họ tên)</div>
+      <div class="sig-name"></div>
+    </td>
+    <td>
+      <div class="sig-label">Người lập phiếu</div>
+      <div class="sig-sub">(Ký, họ tên)</div>
+      <div class="sig-name"></div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>"""
+
+
+@router.get("/{phieu_id}/print", response_class=HTMLResponse)
+def print_phieu(
+    phieu_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    p = _load_with_relations(db, phieu_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu")
+    return _render_print_html(p)
 
 
 @router.post("/{phieu_id}/huy")

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import dayjs from 'dayjs'
 import {
   Alert,
   Button,
@@ -206,7 +207,7 @@ const VATSummaryPage: React.FC = () => {
       title: 'Ngày',
       dataIndex: 'ngay',
       width: 110,
-      render: (value: string | null) => value ? new Date(value).toLocaleDateString('vi-VN') : '—',
+      render: (value: string | null) => value ? dayjs(value).format('DD/MM/YYYY') : '—',
     },
     {
       title: 'Hóa đơn',

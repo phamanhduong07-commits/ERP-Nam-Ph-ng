@@ -1100,6 +1100,8 @@ function TabPhoiSongNgoai() {
         r.nguon === 'lenh_sx'
           ? <><Tag color="purple" style={{ fontSize: 10 }}>LSX</Tag><Text strong>{r.so_lsx}</Text></>
           : <Text strong style={{ color: '#1677ff' }}>{r.so_ke_hoach}</Text> },
+    { title: 'Ngày đẩy qua', dataIndex: 'ngay_ke_hoach', width: 105,
+      render: (v: string | null) => v ? dayjs(v).format('DD/MM/YYYY') : <Text type="secondary">—</Text> },
     { title: 'Ngày chạy', dataIndex: 'ngay_chay', width: 95,
       render: (v: string) => v || <Text type="secondary">—</Text> },
     { title: 'Số LSX', dataIndex: 'so_lsx', width: 120 },

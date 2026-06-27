@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Col, Descriptions, Drawer, Row, Select, Space, Statistic, Table, Tag, Typography, Tabs, Divider, message, Tooltip, Badge,
+  Button, Col, Descriptions, Drawer, Row, Select, Space, Statistic, Switch, Table, Tag, Typography, Tabs, Divider, message, Tooltip, Badge,
   Modal, Radio, Input,
 } from 'antd'
 import { WarningOutlined, ReloadOutlined, DownloadOutlined, PrinterOutlined } from '@ant-design/icons'
@@ -11,6 +11,7 @@ import type { PhanXuong } from '../../api/warehouse'
 import { warehouseApi } from '../../api/warehouse'
 import { exportExcelWithTemplate } from '../../utils/exportUtils'
 import { khoAoPhoiApi, type HangLoiPhoiRow } from '../../api/kho_ao_phoi'
+import { productionOrdersApi, type PhieuNhapPhoiSongListItem } from '../../api/productionOrders'
 import { usePermission } from '../../hooks/usePermission'
 import { getErrorMessage } from '../../utils/errorUtils'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
@@ -284,6 +285,12 @@ export default function KhoLoiPage() {
   const [disposalGhiChu, setDisposalGhiChu] = useState<string>('')
   const [disposalLoading, setDisposalLoading] = useState(false)
 
+  const [phoiDuShowAll, setPhoiDuShowAll] = useState(false)
+  const [phoiDuXuLyModal, setPhoiDuXuLyModal] = useState<{ phieu: PhieuNhapPhoiSongListItem; excess: number } | null>(null)
+  const [xuLyLoaiXuLy, setXuLyLoaiXuLy] = useState('da_nhap_kho_tan_dung')
+  const [xuLyGhiChu, setXuLyGhiChu] = useState('')
+  const [xuLyLoading, setXuLyLoading] = useState(false)
+
   const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
     queryKey: ['phan-xuong-list'],
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
@@ -297,6 +304,32 @@ export default function KhoLoiPage() {
   })
 
   const filterParams = { phap_nhan_id: filterPhapNhanId, phan_xuong_id: filterPhanXuongId }
+
+  const { data: phoiDuPhieuList = [], isLoading: phoiDuLoading } = useQuery<PhieuNhapPhoiSongListItem[]>({
+    queryKey: ['phoi-du-phieu', filterPhanXuongId],
+    queryFn: () => productionOrdersApi.listAllPhieu({ phan_xuong_id: filterPhanXuongId }).then(r => r.data),
+    staleTime: 0,
+  })
+
+  const allPhoiDuItems = useMemo(() => {
+    return phoiDuPhieuList
+      .map(phieu => {
+        const slKh = phieu.items.reduce((s, it) => s + it.so_luong_ke_hoach, 0)
+        const slTt = phieu.tong_so_luong_thuc_te
+        return { phieu, slKh, slTt, excess: slTt - slKh }
+      })
+      .filter(r => r.excess > 0)
+  }, [phoiDuPhieuList])
+
+  const phoiDuItems = useMemo(
+    () => phoiDuShowAll ? allPhoiDuItems : allPhoiDuItems.filter(r => !r.phieu.phoi_du_trang_thai),
+    [allPhoiDuItems, phoiDuShowAll],
+  )
+
+  const phoiDuChuaXuLyCount = useMemo(
+    () => allPhoiDuItems.filter(r => !r.phieu.phoi_du_trang_thai).length,
+    [allPhoiDuItems],
+  )
 
   const { data: khoAoTpData = [], isLoading: khoAoTpLoading } = useQuery<DefectRecordTraVeRow[]>({
     queryKey: ['defect-records-tp', filterParams],
@@ -612,6 +645,13 @@ export default function KhoLoiPage() {
             title={<Badge count={khoAoPhoiData.filter(r => r.trang_thai === 'cho_xu_ly').length} offset={[6, 0]}><span>Phôi lỗi chờ XL</span></Badge>}
             value={khoAoPhoiData.length}
             valueStyle={{ fontSize: 18, color: '#722ed1' }}
+          />
+        </Col>
+        <Col xs={12} sm={4}>
+          <Statistic
+            title={<Badge count={phoiDuChuaXuLyCount} offset={[6, 0]}><span>Phôi dư chờ XL</span></Badge>}
+            value={allPhoiDuItems.length}
+            valueStyle={{ fontSize: 18, color: '#52c41a' }}
           />
         </Col>
       </Row>
@@ -964,6 +1004,122 @@ export default function KhoLoiPage() {
             })(),
           },
           {
+            key: 'phoi-du',
+            label: `📦 Phôi dư (${phoiDuItems.length})`,
+            children: (
+              <>
+                <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
+                  <Col>
+                    <Space>
+                      <Text type="secondary" style={{ fontSize: 12 }}>Hiện đã xử lý:</Text>
+                      <Switch size="small" checked={phoiDuShowAll} onChange={v => setPhoiDuShowAll(v)} />
+                    </Space>
+                  </Col>
+                </Row>
+                <Table<{ phieu: PhieuNhapPhoiSongListItem; slKh: number; slTt: number; excess: number }>
+                  rowKey={r => r.phieu.id}
+                  size="small"
+                  loading={phoiDuLoading}
+                  dataSource={phoiDuItems}
+                  pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} dòng` }}
+                  scroll={{ x: 900 }}
+                  columns={[
+                    {
+                      title: 'Ngày / Ca',
+                      width: 100,
+                      render: (_, r) => (
+                        <Space direction="vertical" size={0}>
+                          <Text style={{ fontSize: 12 }}>{fmtDate(r.phieu.ngay)}</Text>
+                          {r.phieu.ca && <Text type="secondary" style={{ fontSize: 11 }}>Ca {r.phieu.ca}</Text>}
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: 'Số lệnh',
+                      width: 130,
+                      render: (_, r) => r.phieu.so_lenh
+                        ? <Text code style={{ fontSize: 12 }}>{r.phieu.so_lenh}</Text>
+                        : <Text type="secondary">—</Text>,
+                    },
+                    {
+                      title: 'Tên hàng',
+                      ellipsis: true,
+                      render: (_, r) => {
+                        const first = r.phieu.items[0]
+                        return (
+                          <Space direction="vertical" size={0}>
+                            <Text strong style={{ fontSize: 13 }}>{first?.ten_hang || '—'}</Text>
+                            {first?.chieu_kho && first.chieu_cat && (
+                              <Text type="secondary" style={{ fontSize: 11 }}>
+                                {first.chieu_kho} × {first.chieu_cat}
+                              </Text>
+                            )}
+                          </Space>
+                        )
+                      },
+                    },
+                    {
+                      title: 'KH',
+                      width: 75,
+                      align: 'right' as const,
+                      render: (_, r) => fmtN(r.slKh),
+                    },
+                    {
+                      title: 'Thực tế',
+                      width: 80,
+                      align: 'right' as const,
+                      render: (_, r) => fmtN(r.slTt),
+                    },
+                    {
+                      title: 'Phôi dư',
+                      width: 85,
+                      align: 'right' as const,
+                      sorter: (a, b) => a.excess - b.excess,
+                      render: (_, r) => <Text strong style={{ color: '#52c41a' }}>{fmtN(r.excess)}</Text>,
+                    },
+                    {
+                      title: 'Trạng thái',
+                      width: 150,
+                      render: (_, r) => {
+                        const v = r.phieu.phoi_du_trang_thai
+                        if (!v) return <Tag color="orange" style={{ fontSize: 11 }}>Chưa xử lý</Tag>
+                        const map: Record<string, [string, string]> = {
+                          da_nhap_kho_tan_dung: ['Nhập kho TDụng', 'cyan'],
+                          giao_sx: ['Giao SX', 'blue'],
+                          giao_khach: ['Giao khách', 'green'],
+                          huy: ['Huỷ', 'default'],
+                        }
+                        const [label, color] = map[v] ?? [v, 'default']
+                        return <Tag color={color} style={{ fontSize: 11 }}>{label}</Tag>
+                      },
+                    },
+                    {
+                      title: 'Thao tác',
+                      width: 80,
+                      render: (_, r) => {
+                        if (r.phieu.phoi_du_trang_thai) return null
+                        return (
+                          <Button
+                            size="small"
+                            type="primary"
+                            ghost
+                            disabled={!canTransfer}
+                            onClick={e => {
+                              e.stopPropagation()
+                              setPhoiDuXuLyModal({ phieu: r.phieu, excess: r.excess })
+                              setXuLyLoaiXuLy('da_nhap_kho_tan_dung')
+                              setXuLyGhiChu('')
+                            }}
+                          >Xử lý</Button>
+                        )
+                      },
+                    },
+                  ]}
+                />
+              </>
+            ),
+          },
+          {
             key: 'phoi-loi',
             label: `🟣 Phôi lỗi (${khoAoPhoiData.length})`,
             children: (
@@ -1078,6 +1234,69 @@ export default function KhoLoiPage() {
 
       <DrawerLoi row={selectedLoi} onClose={() => setSelectedLoi(null)} />
       <DrawerTra row={selectedTra} onClose={() => setSelectedTra(null)} />
+
+      <Modal
+        open={!!phoiDuXuLyModal}
+        title="Xử lý phôi dư"
+        okText="Xác nhận"
+        cancelText="Huỷ"
+        confirmLoading={xuLyLoading}
+        onCancel={() => setPhoiDuXuLyModal(null)}
+        onOk={() => {
+          if (!phoiDuXuLyModal) return
+          if (!xuLyGhiChu.trim()) { message.warning('Vui lòng nhập ghi chú'); return }
+          setXuLyLoading(true)
+          productionOrdersApi.nhapPhoiDuKho(phoiDuXuLyModal.phieu.id, {
+            so_luong_du: phoiDuXuLyModal.excess,
+            loai_xu_ly: xuLyLoaiXuLy,
+            ghi_chu: xuLyGhiChu,
+          })
+            .then(() => {
+              message.success('Đã xử lý phôi dư')
+              queryClient.invalidateQueries({ queryKey: ['phoi-du-phieu'] })
+              setPhoiDuXuLyModal(null)
+            })
+            .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi xử lý')))
+            .finally(() => setXuLyLoading(false))
+        }}
+      >
+        {phoiDuXuLyModal && (
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <div>
+              <Text strong>{phoiDuXuLyModal.phieu.items[0]?.ten_hang || '—'}</Text>
+              {phoiDuXuLyModal.phieu.so_lenh && (
+                <Text type="secondary" style={{ marginLeft: 8 }}>({phoiDuXuLyModal.phieu.so_lenh})</Text>
+              )}
+              <br />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Phôi dư: <Text strong style={{ color: '#52c41a' }}>{fmtN(phoiDuXuLyModal.excess)} tấm</Text>
+              </Text>
+            </div>
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>Hướng xử lý:</Text>
+              <Radio.Group value={xuLyLoaiXuLy} onChange={e => setXuLyLoaiXuLy(e.target.value)}>
+                <Space direction="vertical">
+                  <Radio value="da_nhap_kho_tan_dung">Nhập kho tận dụng</Radio>
+                  <Radio value="giao_sx">Giao SX (sử dụng luôn)</Radio>
+                  <Radio value="giao_khach">Giao khách</Radio>
+                  <Radio value="huy">Huỷ bỏ</Radio>
+                </Space>
+              </Radio.Group>
+            </div>
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                Ghi chú: <Text type="danger">*</Text>
+              </Text>
+              <Input.TextArea
+                rows={2}
+                value={xuLyGhiChu}
+                onChange={e => setXuLyGhiChu(e.target.value)}
+                placeholder="Bắt buộc nhập ghi chú"
+              />
+            </div>
+          </Space>
+        )}
+      </Modal>
 
       <Modal
         open={!!disposalModal}

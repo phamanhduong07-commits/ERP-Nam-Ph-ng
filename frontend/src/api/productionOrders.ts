@@ -276,6 +276,7 @@ export interface PhieuNhapPhoiSongListItem extends PhieuNhapPhoiSong {
   session_id: number | null
   phoi_du_trang_thai: string | null
   phoi_du_ghi_chu: string | null
+  phan_xuong_id: number | null
 }
 
 export interface NgungPhoiSongResponse {
@@ -340,7 +341,7 @@ export const productionOrdersApi = {
   listPhieu: (orderId: number) =>
     client.get<PhieuNhapPhoiSong[]>(`/production-orders/${orderId}/phieu-nhap-phoi-song`),
 
-  listAllPhieu: (params?: { tu_ngay?: string; den_ngay?: string; production_order_id?: number; warehouse_id?: number }) =>
+  listAllPhieu: (params?: { tu_ngay?: string; den_ngay?: string; production_order_id?: number; warehouse_id?: number; phan_xuong_id?: number }) =>
     client.get<PhieuNhapPhoiSongListItem[]>('/production-orders/phieu-nhap-phoi-song', { params }),
 
   batchSetTanDung: (ids: number[], tan_dung = true) =>
