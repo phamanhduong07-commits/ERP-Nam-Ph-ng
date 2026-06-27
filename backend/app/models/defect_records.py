@@ -27,6 +27,12 @@ class DefectRecord(Base):
     warehouse_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("warehouses.id"), nullable=True
     )
+    phan_xuong_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("phan_xuong.id"), nullable=True
+    )
+    phap_nhan_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("phap_nhan.id"), nullable=True
+    )
     production_order_id_tan_dung: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("production_orders.id"), nullable=True
     )

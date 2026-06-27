@@ -169,9 +169,13 @@ def _context_phoi_item(ref_id: int, db: Session) -> dict:
 
 
 def _context_sales_return_item(ref_id: int, db: Session) -> dict:
-    """Ngữ cảnh cho hàng trả về lỗi: SalesReturnItem → SalesReturn / SalesOrderItem / Customer."""
+    """Ngữ cảnh cho hàng trả về lỗi: SalesReturnItem → SalesReturn / SalesOrderItem / Customer.
+
+    Resolve phan_xuong/phap_nhan qua: SalesOrderItem → ProductionOrderItem → ProductionOrder.
+    """
     from app.models.sales import SalesReturnItem, SalesReturn, SalesOrderItem
     from app.models.master import Customer
+    from app.models.production import ProductionOrderItem
 
     sri = db.get(SalesReturnItem, ref_id)
     if not sri:
@@ -186,6 +190,27 @@ def _context_sales_return_item(ref_id: int, db: Session) -> dict:
         if cust:
             ten_khach_hang = cust.ten_viet_tat or cust.ten_don_vi
 
+    # Resolve phan_xuong / phap_nhan từ POI → PO
+    phan_xuong_id = None
+    phap_nhan_id = None
+    ten_phan_xuong = None
+    ten_phap_nhan = None
+    if soi:
+        poi = (
+            db.query(ProductionOrderItem)
+            .filter(ProductionOrderItem.sales_order_item_id == soi.id)
+            .first()
+        )
+        if poi:
+            order = db.get(ProductionOrder, poi.production_order_id)
+            if order:
+                phan_xuong_id = order.phan_xuong_id
+                phap_nhan_id = order.phap_nhan_id
+                px = db.get(PhanXuong, order.phan_xuong_id) if order.phan_xuong_id else None
+                pn = db.get(PhapNhan, order.phap_nhan_id) if order.phap_nhan_id else None
+                ten_phan_xuong = px.ten_xuong if px else None
+                ten_phap_nhan = pn.ten_viet_tat if pn else None
+
     ctx = _empty_context()
     ctx.update({
         "customer_id": sr.customer_id if sr else None,
@@ -196,6 +221,10 @@ def _context_sales_return_item(ref_id: int, db: Session) -> dict:
         "dvt": (soi.dvt if soi else None) or "Thùng",
         "ten_khach_hang": ten_khach_hang,
         "ly_do_tra": sri.ly_do_tra,
+        "phan_xuong_id": phan_xuong_id,
+        "phap_nhan_id": phap_nhan_id,
+        "ten_phan_xuong": ten_phan_xuong,
+        "ten_phap_nhan": ten_phap_nhan,
     })
     return ctx
 
@@ -269,6 +298,11 @@ def list_defect_records(
         q = q.filter(DefectRecord.khau == khau)
     if trang_thai:
         q = q.filter(DefectRecord.trang_thai == trang_thai)
+    # phan_xuong_id / phap_nhan_id giờ được lưu trực tiếp → dùng SQL filter
+    if phan_xuong_id is not None:
+        q = q.filter(DefectRecord.phan_xuong_id == phan_xuong_id)
+    if phap_nhan_id is not None:
+        q = q.filter(DefectRecord.phap_nhan_id == phap_nhan_id)
     rows = q.order_by(DefectRecord.created_at.desc()).limit(300).all()
 
     results = [_to_response(r, db) for r in rows]
@@ -289,10 +323,6 @@ def list_defect_records(
         ).all()}
         results = [r for r in results if r.get("customer_id") in visible_cids]
 
-    if phan_xuong_id is not None:
-        results = [r for r in results if r["phan_xuong_id"] == phan_xuong_id]
-    if phap_nhan_id is not None:
-        results = [r for r in results if r["phap_nhan_id"] == phap_nhan_id]
     if tu_ngay is not None:
         tu_str = tu_ngay.isoformat()
         results = [r for r in results if r["ngay"] is not None and r["ngay"] >= tu_str]
@@ -301,6 +331,17 @@ def list_defect_records(
         results = [r for r in results if r["ngay"] is not None and r["ngay"] <= den_str]
 
     return results
+
+
+def _resolve_context_for_ref(ref_type: str, ref_id: int, db: Session) -> dict:
+    """Resolve context chỉ để lấy phan_xuong_id/phap_nhan_id — gọi trước khi tạo DefectRecord."""
+    if ref_type == REF_TYPE_PRODUCTION_OUTPUT:
+        return _context_production_output(ref_id, db)
+    if ref_type == REF_TYPE_PHOI_ITEM:
+        return _context_phoi_item(ref_id, db)
+    if ref_type == REF_TYPE_SALES_RETURN_ITEM:
+        return _context_sales_return_item(ref_id, db)
+    return _empty_context()
 
 
 @router.post("/nhap", status_code=201)
@@ -366,12 +407,17 @@ def nhap_defect_record(
         source = None
         source_attr = None
 
+    # Resolve phan_xuong/phap_nhan tại thời điểm nhập để lưu trực tiếp vào bảng
+    ctx = _resolve_context_for_ref(body.ref_type, body.ref_id, db)
+
     entry = DefectRecord(
         ref_type=body.ref_type,
         ref_id=body.ref_id,
         khau=khau,
         so_luong=so_luong_loi,
         trang_thai="cho_xu_ly",
+        phan_xuong_id=ctx.get("phan_xuong_id"),
+        phap_nhan_id=ctx.get("phap_nhan_id"),
         created_by=current_user.id,
     )
     db.add(entry)
