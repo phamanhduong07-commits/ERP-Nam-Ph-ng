@@ -928,6 +928,106 @@ export async function printProductionTagBatch(data: Record<string, unknown>, tot
   setTimeout(() => { win.print(); win.close() }, 300)
 }
 
+export async function printPhoiDuTag(data: {
+  so_lenh: string
+  ten_san_pham: string
+  ten_khach_hang: string
+  so_don_hang: string
+  kho_cat: string
+  so_lop_song: string
+  phan_xuong: string
+  so_luong_du: number
+  ngay_sx: string
+  ca: string
+  ghi_chu?: string
+}, totalTem: number) {
+  if (totalTem < 1) return
+  const qrDataUrl = await QRCode.toDataURL(data.so_lenh || 'N/A', { margin: 1 })
+  const { so_lenh, ten_san_pham, ten_khach_hang, so_don_hang, kho_cat, so_lop_song, phan_xuong, so_luong_du, ngay_sx, ca, ghi_chu = '' } = data
+  const tenFontSize = ten_san_pham.length > 60 ? 11 : ten_san_pham.length > 40 ? 13 : ten_san_pham.length > 25 ? 15 : 18
+
+  const makeTable = (idx: number, total: number) => `<table>
+  <colgroup>
+    <col style="width:12%"><col style="width:22%"><col style="width:12%">
+    <col style="width:18%"><col style="width:7%"><col style="width:29%">
+  </colgroup>
+  <tr>
+    <td colspan="5" class="hdr-du">&#9888; PHÔI DƯ — TỒN KHO</td>
+    <td rowspan="3" class="qr"><img src="${qrDataUrl}"><div class="qr-num">${so_lenh}</div></td>
+  </tr>
+  <tr>
+    <td class="lbl">SỐ LỆNH</td>
+    <td colspan="2" class="vxl">${so_lenh}</td>
+    <td class="lbl">NGÀY SX</td>
+    <td class="vmd">${ngay_sx}</td>
+  </tr>
+  <tr>
+    <td class="lbl">XƯỞNG SX</td>
+    <td colspan="2" class="vlg">${phan_xuong}</td>
+    <td class="lbl">CA</td>
+    <td class="vmd">${ca}</td>
+  </tr>
+  <tr>
+    <td class="lbl">KHÁCH<br>HÀNG</td>
+    <td colspan="2" class="vlg">${ten_khach_hang}</td>
+    <td class="lbl">SỐ ĐH</td>
+    <td colspan="2" class="vmd">${so_don_hang}</td>
+  </tr>
+  <tr>
+    <td class="lbl">TÊN SẢN<br>PHẨM</td>
+    <td colspan="5" class="vxl" style="font-size:${tenFontSize}px;height:50px;line-height:1.4;white-space:normal;word-break:break-word">${ten_san_pham}</td>
+  </tr>
+  <tr>
+    <td class="lbl">KÍCH<br>THƯỚC</td>
+    <td colspan="2" class="vlg">${kho_cat}</td>
+    <td class="lbl">LỚP /<br>SÓNG</td>
+    <td colspan="2" class="vlg">${so_lop_song}</td>
+  </tr>
+  <tr>
+    <td class="lbl">SỐ LƯỢNG<br>DƯ</td>
+    <td colspan="5" class="v3xl">${so_luong_du.toLocaleString('vi-VN')} phôi</td>
+  </tr>
+  <tr>
+    <td class="lbl">GHI CHÚ</td>
+    <td colspan="5" class="val">Tem ${idx + 1}/${total}${ghi_chu ? ' | ' + ghi_chu : ''}</td>
+  </tr>
+</table>`
+
+  const css = `
+    @page { size: A5 portrait; margin: 5mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    .pg { page-break-after: always; }
+    .pg:last-child { page-break-after: auto; }
+    table { width: 100%; border-collapse: collapse; border: 2px solid #000; table-layout: fixed; }
+    td { border: 1px solid #000; padding: 3px 5px; vertical-align: middle; word-break: break-word; }
+    .hdr-du { font-size: 22px; font-weight: bold; letter-spacing: 2px; text-align: center;
+              background: #E65100; color: #fff; padding: 7px 4px; }
+    .lbl  { font-size: 9px; font-weight: bold; text-transform: uppercase; text-align: center;
+            background: #f0f0f0; line-height: 1.4; color: #000; }
+    .val  { font-size: 13px; }
+    .vmd  { font-size: 15px; font-weight: bold; text-align: center; }
+    .vlg  { font-size: 19px; font-weight: bold; text-align: center; }
+    .vxl  { font-size: 22px; font-weight: bold; text-align: center; }
+    .v3xl { font-size: 34px; font-weight: bold; text-align: center; color: #E65100; padding: 6px 0; }
+    .qr   { text-align: center; vertical-align: middle; padding: 4px; }
+    .qr img { width: 108px; height: 108px; display: block; margin: 0 auto 3px; }
+    .qr-num { font-size: 10px; font-weight: bold; }
+  `
+
+  const pages = Array.from({ length: totalTem }, (_, i) =>
+    `<div class="pg">${makeTable(i, totalTem)}</div>`,
+  ).join('\n')
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Phoi Du - ${so_lenh}</title><style>${css}</style></head><body>${pages}</body></html>`
+  const win = window.open('', '_blank')
+  if (!win) return
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+  setTimeout(() => { win.print(); win.close() }, 300)
+}
+
 /**
  * Smart Print PDF: Lấy template HTML từ DB và render dữ liệu.
  * @param ma_mau Mã mẫu in

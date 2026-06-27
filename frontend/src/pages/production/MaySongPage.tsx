@@ -20,7 +20,7 @@ import { productionPlansApi } from '../../api/productionPlans'
 import type { PlanLineResponse } from '../../api/productionPlans'
 import { warehouseApi } from '../../api/warehouse'
 import { calcBoxDimensions } from '../../api/quotes'
-import { printProductionTagBatch, exportExcelWithTemplate } from '../../utils/exportUtils'
+import { printProductionTagBatch, exportExcelWithTemplate, printPhoiDuTag } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
@@ -916,6 +916,15 @@ export default function MaySongPage() {
   const [histSearchLenh, setHistSearchLenh] = useState('')
   const [inTemTabSearch, setInTemTabSearch] = useState('')
   const [inTemTabLoading, setInTemTabLoading] = useState(false)
+  const [phoiDuTuNgay, setPhoiDuTuNgay] = useState<string>(() => dayjs().startOf('month').format('YYYY-MM-DD'))
+  const [phoiDuDenNgay, setPhoiDuDenNgay] = useState<string>(() => dayjs().format('YYYY-MM-DD'))
+  const [phoiDuPrintModal, setPhoiDuPrintModal] = useState<{
+    phieu: PhieuNhapPhoiSongListItem
+    order: ProductionOrder | null
+    excessQty: number
+    soTem: number
+  } | null>(null)
+  const [phoiDuPrintLoading, setPhoiDuPrintLoading] = useState(false)
   const qc = useQueryClient()
 
   // ─── Queries ───────────────────────────────────────────────────────────────
@@ -1034,6 +1043,26 @@ export default function MaySongPage() {
     staleTime: 30_000,
   })
   const inTemSearchItems = inTemSearchRes?.items ?? []
+
+  const { data: phoiDuPhieuList = [], isLoading: phoiDuPhieuLoading } = useQuery({
+    queryKey: ['phoi-du-phieu', phoiDuTuNgay, phoiDuDenNgay],
+    queryFn: () =>
+      productionOrdersApi.listAllPhieu({ tu_ngay: phoiDuTuNgay, den_ngay: phoiDuDenNgay }).then(r => r.data),
+    enabled: activeTab === 'phoi_du',
+    staleTime: 60_000,
+  })
+
+  const phoiDuItems = useMemo(() => {
+    return phoiDuPhieuList
+      .map(p => {
+        const slKh = p.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
+        const slTt  = Number(p.tong_so_luong_thuc_te)
+        const excess = Math.round((slTt - slKh) * 1000) / 1000
+        return { phieu: p, slKh, slTt, excess }
+      })
+      .filter(r => r.excess > 0.001)
+      .sort((a, b) => b.phieu.ngay.localeCompare(a.phieu.ngay))
+  }, [phoiDuPhieuList])
 
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
@@ -1205,6 +1234,44 @@ export default function MaySongPage() {
     } finally {
       setInTemTabLoading(false)
     }
+  }
+
+  const handlePhoiDuOpenPrint = async (phieu: PhieuNhapPhoiSongListItem, excessQty: number) => {
+    setPhoiDuPrintLoading(true)
+    try {
+      const orderRes = await productionOrdersApi.get(phieu.production_order_id)
+      setPhoiDuPrintModal({ phieu, order: orderRes.data, excessQty, soTem: 1 })
+    } catch {
+      message.error('Lỗi khi tải dữ liệu đơn hàng')
+    } finally {
+      setPhoiDuPrintLoading(false)
+    }
+  }
+
+  const handlePhoiDuConfirmPrint = async () => {
+    const modal = phoiDuPrintModal
+    if (!modal) return
+    const { phieu, order, excessQty, soTem } = modal
+    const oi     = order?.items[0]
+    const item0  = phieu.items[0]
+    const khoCm  = item0?.chieu_kho  != null ? String(item0.chieu_kho)  : '?'
+    const catCm  = item0?.chieu_cat  != null ? String(item0.chieu_cat)  : '?'
+    const soLop  = item0?.so_lop ?? oi?.so_lop ?? null
+    const toHopSong = oi?.to_hop_song ?? ''
+    await printPhoiDuTag({
+      so_lenh:        phieu.so_lenh ?? '',
+      ten_san_pham:   item0?.ten_hang ?? oi?.ten_hang ?? '',
+      ten_khach_hang: order?.ten_khach_hang ?? '',
+      so_don_hang:    order?.so_don ?? '',
+      kho_cat:        `${khoCm} × ${catCm} cm`,
+      so_lop_song:    `${soLop ?? '?'}L / ${toHopSong}`,
+      phan_xuong:     order?.ten_phan_xuong ?? 'Nam Phương',
+      so_luong_du:    excessQty,
+      ngay_sx:        phieu.ngay,
+      ca:             phieu.ca ?? '',
+      ghi_chu:        phieu.ghi_chu ?? '',
+    }, soTem)
+    setPhoiDuPrintModal(null)
   }
 
   // ─── Cột bảng Tab 1 ────────────────────────────────────────────────────────
@@ -2144,6 +2211,153 @@ export default function MaySongPage() {
               </>
             ),
           },
+
+          // ══════════════════════════════════════════════════════════════
+          //  TAB 4 — Phôi dư
+          // ══════════════════════════════════════════════════════════════
+          {
+            key: 'phoi_du',
+            label: activeTab === 'phoi_du' && phoiDuItems.length > 0
+              ? `Phôi dư (${phoiDuItems.length})`
+              : 'Phôi dư',
+            children: (() => {
+              const tongDu = phoiDuItems.reduce((s, r) => s + r.excess, 0)
+              return (
+                <>
+                  <Row gutter={8} style={{ marginBottom: 12 }} align="middle">
+                    <Col>
+                      <DatePicker
+                        value={dayjs(phoiDuTuNgay)}
+                        onChange={d => setPhoiDuTuNgay(d ? d.format('YYYY-MM-DD') : dayjs().startOf('month').format('YYYY-MM-DD'))}
+                        placeholder="Từ ngày"
+                        format="DD/MM/YYYY"
+                        allowClear={false}
+                      />
+                    </Col>
+                    <Col><Text type="secondary">—</Text></Col>
+                    <Col>
+                      <DatePicker
+                        value={dayjs(phoiDuDenNgay)}
+                        onChange={d => setPhoiDuDenNgay(d ? d.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'))}
+                        placeholder="Đến ngày"
+                        format="DD/MM/YYYY"
+                        allowClear={false}
+                      />
+                    </Col>
+                    {phoiDuPhieuLoading && <Col><Spin size="small" /></Col>}
+                    {phoiDuItems.length > 0 && (
+                      <Col>
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                          {phoiDuItems.length} phiếu có phôi dư ·{' '}
+                          <Text strong style={{ color: '#E65100' }}>
+                            {Math.round(tongDu).toLocaleString('vi-VN')} phôi dư
+                          </Text>
+                        </Text>
+                      </Col>
+                    )}
+                  </Row>
+
+                  {!phoiDuPhieuLoading && phoiDuItems.length === 0 ? (
+                    <EmptyState
+                      preset="default"
+                      title="Không có phôi dư"
+                      description="Tất cả phiếu nhập trong khoảng thời gian này sản xuất đúng kế hoạch"
+                    />
+                  ) : (
+                    <Table
+                      dataSource={phoiDuItems}
+                      rowKey={r => r.phieu.id}
+                      loading={phoiDuPhieuLoading}
+                      pagination={false}
+                      size="small"
+                      columns={[
+                        {
+                          key: 'ngay',
+                          title: 'Ngày / Ca',
+                          width: 110,
+                          render: (_, r) => (
+                            <div>
+                              <div style={{ fontWeight: 600 }}>{r.phieu.ngay}</div>
+                              {r.phieu.ca && <Text type="secondary" style={{ fontSize: 11 }}>{r.phieu.ca}</Text>}
+                            </div>
+                          ),
+                        },
+                        {
+                          key: 'so_lenh',
+                          title: 'Số lệnh',
+                          width: 150,
+                          render: (_, r) => (
+                            <Text strong style={{ fontFamily: 'monospace' }}>
+                              {r.phieu.so_lenh ?? '—'}
+                            </Text>
+                          ),
+                        },
+                        {
+                          key: 'ten_hang',
+                          title: 'Tên hàng',
+                          ellipsis: true,
+                          render: (_, r) => r.phieu.items[0]?.ten_hang ?? <Text type="secondary">—</Text>,
+                        },
+                        {
+                          key: 'kho_cat',
+                          title: 'Khổ × Cắt',
+                          width: 105,
+                          align: 'center',
+                          render: (_, r) => {
+                            const it = r.phieu.items[0]
+                            if (!it?.chieu_kho && !it?.chieu_cat) return <Text type="secondary">—</Text>
+                            return <Text style={{ fontWeight: 600 }}>{it.chieu_kho} × {it.chieu_cat} cm</Text>
+                          },
+                        },
+                        {
+                          key: 'sl_kh',
+                          title: 'KH',
+                          width: 80,
+                          align: 'right',
+                          render: (_, r) => r.slKh.toLocaleString('vi-VN'),
+                        },
+                        {
+                          key: 'sl_tt',
+                          title: 'Thực tế',
+                          width: 80,
+                          align: 'right',
+                          render: (_, r) => r.slTt.toLocaleString('vi-VN'),
+                        },
+                        {
+                          key: 'excess',
+                          title: 'Dư',
+                          width: 90,
+                          align: 'right',
+                          render: (_, r) => (
+                            <Text strong style={{ color: '#E65100', fontSize: 14 }}>
+                              +{r.excess.toLocaleString('vi-VN')}
+                            </Text>
+                          ),
+                        },
+                        {
+                          key: 'action',
+                          title: '',
+                          width: 120,
+                          align: 'center',
+                          render: (_, r) => (
+                            <Button
+                              size="small"
+                              icon={<PrinterOutlined />}
+                              loading={phoiDuPrintLoading}
+                              onClick={() => handlePhoiDuOpenPrint(r.phieu, r.excess)}
+                              style={{ borderColor: '#E65100', color: '#E65100' }}
+                            >
+                              In tem dư
+                            </Button>
+                          ),
+                        },
+                      ]}
+                    />
+                  )}
+                </>
+              )
+            })(),
+          },
         ]}
       />
 
@@ -2180,6 +2394,74 @@ export default function MaySongPage() {
         onUpdateTamPerPallet={nTpp => setInTemState(s => s ? { ...s, tamPerPallet: nTpp, soPallet: s.soTam > 0 ? Math.ceil(s.soTam / nTpp) : 1 } : null)}
         onUpdateSoPallet={n => setInTemState(s => s ? { ...s, soPallet: n } : null)}
       />
+
+      <Modal
+        title={`In tem phôi dư — ${phoiDuPrintModal?.phieu.so_lenh ?? ''}`}
+        open={phoiDuPrintModal !== null}
+        onCancel={() => setPhoiDuPrintModal(null)}
+        onOk={handlePhoiDuConfirmPrint}
+        okText={<><PrinterOutlined /> In {phoiDuPrintModal?.soTem ?? 1} tem</>}
+        width={460}
+        destroyOnHidden
+      >
+        {phoiDuPrintModal && (() => {
+          const { phieu, order, excessQty } = phoiDuPrintModal
+          const item0 = phieu.items[0]
+          return (
+            <>
+              <div style={{ border: '2px solid #E65100', borderRadius: 6, padding: 12, marginBottom: 16, background: '#fff8f6' }}>
+                <div style={{ background: '#E65100', color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: 2, textAlign: 'center', borderRadius: 4, padding: '4px 0', marginBottom: 10 }}>
+                  PHÔI DƯ — TỒN KHO
+                </div>
+                <Row gutter={8} style={{ marginBottom: 6 }}>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 10 }}>SỐ LỆNH</Text>
+                    <div><Text strong style={{ fontFamily: 'monospace' }}>{phieu.so_lenh}</Text></div>
+                  </Col>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 10 }}>KHÁCH HÀNG</Text>
+                    <div><Text strong>{order?.ten_khach_hang ?? '—'}</Text></div>
+                  </Col>
+                </Row>
+                <div style={{ marginBottom: 6 }}>
+                  <Text type="secondary" style={{ fontSize: 10 }}>TÊN SẢN PHẨM</Text>
+                  <div><Text strong style={{ fontSize: 14 }}>{item0?.ten_hang ?? '—'}</Text></div>
+                </div>
+                <Row gutter={8} style={{ marginBottom: 6 }}>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 10 }}>KÍCH THƯỚC</Text>
+                    <div><Text strong>{item0?.chieu_kho} × {item0?.chieu_cat} cm</Text></div>
+                  </Col>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 10 }}>NGÀY SX / CA</Text>
+                    <div><Text>{phieu.ngay}{phieu.ca ? ` — ${phieu.ca}` : ''}</Text></div>
+                  </Col>
+                </Row>
+                <div style={{ border: '2px solid #E65100', borderRadius: 6, textAlign: 'center', padding: '8px 4px', background: '#fff' }}>
+                  <div style={{ fontSize: 11, color: '#E65100', fontWeight: 600, marginBottom: 2 }}>SỐ LƯỢNG DƯ</div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: '#E65100', lineHeight: 1.2 }}>
+                    +{excessQty.toLocaleString('vi-VN')}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#888' }}>phôi</div>
+                </div>
+              </div>
+              <Row align="middle" gutter={12}>
+                <Col span={14}><Text strong>Số lượng tem cần in:</Text></Col>
+                <Col span={10}>
+                  <InputNumber
+                    min={1} max={20}
+                    value={phoiDuPrintModal.soTem}
+                    onChange={v => setPhoiDuPrintModal(s => s ? { ...s, soTem: v ?? 1 } : null)}
+                    size="large"
+                    style={{ width: '100%' }}
+                    addonAfter="tem"
+                  />
+                </Col>
+              </Row>
+            </>
+          )
+        })()}
+      </Modal>
 
       <Modal
         title="Tạo phiên sản xuất mới"
