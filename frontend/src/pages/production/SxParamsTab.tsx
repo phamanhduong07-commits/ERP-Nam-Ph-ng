@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, useCallback } from 'react'
+﻿import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Row, Col, Table, InputNumber, Select, Input, Button, Space, Typography,
@@ -154,6 +154,20 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
     if (newKho > 0) setKhoTt(newKho)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nguocSong])
+
+  // Khi user sửa QCCL thủ công → tính lại chiều khổ từ tổng QCCL
+  const qcclMountRef = useRef(true)
+  useEffect(() => {
+    if (qcclMountRef.current) { qcclMountRef.current = false; return }
+    const parts = qccl.split('+').map(p => parseFloat(p.trim()))
+    if (parts.length !== 3 || parts.some(p => isNaN(p) || p <= 0)) return
+    const qcclKho = Math.round((parts[0] + parts[1] + parts[2]) * 10) / 10
+    const beN = Math.max(1, beConBe)
+    const soDaoBase = Math.max(1, Math.floor(180 / (qcclKho * beN)))
+    const newKho = Math.ceil((qcclKho * beN * soDaoBase + 1.8) / 5) * 5
+    if (newKho > 0) setKhoTt(newKho)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qccl])
 
   const layerDefs = useMemo(() => getLayerDefs(soLop, toHopSong), [soLop, toHopSong])
   const haoHut    = getHaoHutRate(soLuong)

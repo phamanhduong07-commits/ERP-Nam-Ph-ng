@@ -11,7 +11,7 @@ import {
   ArrowLeftOutlined, PlayCircleOutlined, CheckCircleOutlined,
   CloseOutlined, SaveOutlined, CalculatorOutlined, EditOutlined,
   FileExcelOutlined, FilePdfOutlined, FileTextOutlined, SendOutlined, AuditOutlined,
-  ShoppingCartOutlined, WarningOutlined,
+  ShoppingCartOutlined, WarningOutlined, RollbackOutlined,
 } from '@ant-design/icons'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
@@ -351,6 +351,17 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
       invalidate()
     } catch {
       message.error('Thất bại')
+    }
+  }
+
+  const handleHuyMuaPhoi = async () => {
+    try {
+      const res = await productionOrdersApi.huyMuaPhoi(Number(id))
+      message.success(`Lệnh ${res.data.so_lenh} đã hủy mua phôi ngoài, quay về trạng thái Mới.`)
+      invalidate()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(msg || 'Thất bại')
     }
   }
 
@@ -1120,6 +1131,19 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   >
                     <Button size="small" icon={<ShoppingCartOutlined />} style={{ color: '#722ed1', borderColor: '#722ed1' }}>
                       Mua phôi ngoài
+                    </Button>
+                  </Popconfirm>
+                )}
+                {order.trang_thai === 'mua_ngoai' && (
+                  <Popconfirm
+                    title="Hủy mua phôi ngoài?"
+                    description="Lệnh sẽ quay về trạng thái Mới. Chỉ thực hiện nếu chưa lên đơn mua."
+                    onConfirm={handleHuyMuaPhoi}
+                    okText="Hủy mua"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button size="small" icon={<RollbackOutlined />} style={{ color: '#d4380d', borderColor: '#d4380d' }}>
+                      Hủy mua ngoài
                     </Button>
                   </Popconfirm>
                 )}

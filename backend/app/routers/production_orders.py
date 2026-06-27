@@ -675,7 +675,7 @@ def pause_order(
     order_id: int,
     data: PauseOrderBody,
     db: Session = Depends(get_db),
-    user: User = Depends(require_any_permission("production_order.edit")),
+    user: User = Depends(require_any_permission("production_order.edit", "production_order.start")),
 ):
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
@@ -705,7 +705,7 @@ def resume_order(
     order_id: int,
     data: ResumeOrderBody,
     db: Session = Depends(get_db),
-    _: User = Depends(require_any_permission("production_order.edit")),
+    _: User = Depends(require_any_permission("production_order.edit", "production_order.start")),
 ):
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
@@ -802,7 +802,7 @@ def update_item_sx_params(
     item_id: int,
     data: UpdateItemSxParams,
     db: Session = Depends(get_db),
-    _: User = Depends(require_any_permission("production_order.edit")),
+    _: User = Depends(require_any_permission("production_order.edit", "production_order.start")),
 ):
     """Cập nhật thông số sản xuất (kết cấu giấy, chiều khổ).
     Không ảnh hưởng đến giá bán."""
@@ -875,6 +875,8 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
         "ghi_chu": p.ghi_chu,
         "gio_bat_dau": p.gio_bat_dau,
         "gio_ket_thuc": p.gio_ket_thuc,
+        "phoi_du_trang_thai": p.phoi_du_trang_thai,
+        "phoi_du_ghi_chu": p.phoi_du_ghi_chu,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "items": [
             {
@@ -915,7 +917,7 @@ def create_phieu_nhap_phoi_song(
     order_id: int,
     data: PhieuBody,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_any_permission("production_order.edit")),
+    current_user: User = Depends(require_any_permission("production_order.edit", "production_order.complete")),
 ):
     """Tạo phiếu nhập phôi sóng (1 phiếu/phiên, ghi nhận cả giờ bắt đầu và kết thúc)."""
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
@@ -1277,6 +1279,62 @@ def list_phieu_nhap_phoi_song(
     return result
 
 
+class XuLyPhoiDuBody(BaseModel):
+    so_luong_du: float
+    loai_xu_ly: str          # 'da_nhap_kho_tan_dung' | 'giao_sx' | 'giao_khach' | 'huy'
+    ghi_chu: str | None = None
+
+
+@router.post("/phieu/{phieu_id:int}/nhap-phoi-du-kho", status_code=200)
+def xu_ly_phoi_du(
+    phieu_id: int,
+    data: XuLyPhoiDuBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Đánh dấu xử lý phôi dư — nếu loai_xu_ly='da_nhap_kho_tan_dung' thì cập nhật tồn kho TAN_DUNG."""
+    phieu = (
+        db.query(PhieuNhapPhoiSong)
+        .options(joinedload(PhieuNhapPhoiSong.production_order))
+        .filter(PhieuNhapPhoiSong.id == phieu_id)
+        .first()
+    )
+    if not phieu:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu nhập phôi")
+
+    so_luong = Decimal(str(data.so_luong_du))
+
+    if data.loai_xu_ly == "da_nhap_kho_tan_dung" and so_luong > 0:
+        order = phieu.production_order
+        phan_xuong_id = order.phan_xuong_id if order else None
+        kho_td = _get_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG") if phan_xuong_id else None
+        if not kho_td:
+            raise HTTPException(
+                status_code=400,
+                detail="Xưởng chưa có kho Tận dụng (loại TAN_DUNG). Vui lòng tạo kho trước.",
+            )
+        from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
+        item0 = phieu.items[0] if phieu.items else None
+        if item0 and item0.chieu_kho and item0.chieu_cat:
+            ten_hang = f"{int(item0.chieu_kho)}x{int(item0.chieu_cat)}"
+        else:
+            ten_hang = "Phôi dư"
+        balance = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
+        nhap_balance(balance, so_luong, Decimal("0"))
+        log_tx(
+            db, kho_td.id, "NHAP_PHOI_DU", so_luong, Decimal("0"),
+            balance.ton_luong, "phieu_nhap_phoi_song", phieu_id,
+            created_by=current_user.id,
+            ghi_chu=data.ghi_chu,
+        )
+
+    phieu.phoi_du_trang_thai = data.loai_xu_ly
+    phieu.phoi_du_ghi_chu = data.ghi_chu
+    db.commit()
+    db.refresh(phieu)
+    return _phieu_to_dict(phieu)
+
+
 @router.delete("/{order_id:int}/phieu-nhap-phoi-song/{phieu_id:int}")
 def delete_phieu_nhap_phoi_song(
     order_id: int,
@@ -1382,6 +1440,54 @@ def chuyen_mua_phoi(
 
     db.commit()
     return {"ok": True, "trang_thai": "mua_ngoai", "so_lenh": order.so_lenh}
+
+
+@router.patch("/{order_id:int}/huy-mua-phoi")
+def huy_mua_phoi(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_any_permission("production_order.edit")),
+):
+    """Hủy mua phôi ngoài, đưa lệnh về trạng thái 'mới'.
+    Chỉ cho phép nếu chưa có phiếu nhập phôi nào cho lệnh này."""
+    order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+    if order.trang_thai != "mua_ngoai":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Lệnh đang ở '{order.trang_thai}', không phải 'mua_ngoai'",
+        )
+    has_phieu = (
+        db.query(PhieuNhapPhoiSong)
+        .filter(PhieuNhapPhoiSong.production_order_id == order_id)
+        .first()
+    )
+    if has_phieu:
+        raise HTTPException(
+            status_code=400,
+            detail="Lệnh đã có phiếu nhập phôi — liên hệ bộ phận kho để xử lý trước",
+        )
+
+    order.trang_thai = "moi"
+
+    items = (
+        db.query(ProductionOrderItem)
+        .filter(ProductionOrderItem.production_order_id == order_id)
+        .all()
+    )
+    for item in items:
+        item.mua_phoi_ngoai = False
+        plan_lines = (
+            db.query(ProductionPlanLine)
+            .filter(ProductionPlanLine.production_order_item_id == item.id)
+            .all()
+        )
+        for pl in plan_lines:
+            pl.mua_phoi_ngoai = False
+
+    db.commit()
+    return {"ok": True, "trang_thai": "moi", "so_lenh": order.so_lenh}
 
 
 # ── Đẩy lệnh sang hệ thống CD2 (Công Đoạn 2) ────────────────────────────────

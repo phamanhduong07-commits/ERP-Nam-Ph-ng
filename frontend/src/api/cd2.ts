@@ -282,11 +282,13 @@ export interface KhoRow {
   chieu_cat: number | null
   tong_nhap: number
   tong_xuat: number
+  tong_tra_khach: number
   tong_chuyen_phoi: number
   ton_kho: number
   ton_kho_tai_nguon: number  // phôi còn tại kho Hoàng Gia chưa chuyển đi (chỉ có nghĩa với CD2 xưởng)
   ton_kho_tai_cd2: number    // phôi đã đến kho CD2 chưa sản xuất
   don_gia_noi_bo: number | null  // giá nội bộ chuyển kho (đ/tấm) — từ LSX, dùng cho hạch toán quản trị
+  ngay_nhap_kho?: string | null
   phieu_in_hien_tai: { so_phieu: string; trang_thai: string } | null
 }
 

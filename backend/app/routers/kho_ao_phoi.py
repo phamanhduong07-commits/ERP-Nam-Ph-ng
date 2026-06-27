@@ -5,6 +5,7 @@ frontend không phải đổi. Dữ liệu đọc/ghi từ defect_records với 
 ref_type='phieu_nhap_phoi_song_item', ref_id=phieu_nhap_phoi_song_item_id.
 """
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -16,6 +17,9 @@ from app.models.master import PhanXuong, PhapNhan, Warehouse
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.defect_records import DefectRecord
+from app.services.inventory_service import (
+    get_workshop_warehouse, get_or_create_balance, nhap_balance, xuat_balance, log_tx
+)
 
 router = APIRouter(prefix="/api/kho-ao-phoi", tags=["kho-ao-phoi"])
 
@@ -106,6 +110,24 @@ def nhap_kho_ao_phoi(
     )
     db.add(entry)
     item.trang_thai_loi = 'da_nhap_kho_ao'
+    db.flush()  # lấy entry.id trước khi commit
+
+    # Nhập vào kho TAN_DUNG thực tế
+    phieu = db.get(PhieuNhapPhoiSong, item.phieu_id)
+    order = db.get(ProductionOrder, phieu.production_order_id) if phieu else None
+    if order and order.phan_xuong_id:
+        kho = get_workshop_warehouse(db, order.phan_xuong_id, 'TAN_DUNG')
+        if kho:
+            ten_hang = (f"{int(item.chieu_kho)}x{int(item.chieu_cat)}"
+                        if item.chieu_kho and item.chieu_cat else "Phôi lỗi")
+            so_luong_d = Decimal(str(item.so_luong_loi))
+            balance = get_or_create_balance(db, kho.id, ten_hang=ten_hang, don_vi="Tấm")
+            nhap_balance(balance, so_luong_d, Decimal("0"))
+            log_tx(db, kho.id, "NHAP_PHOI_LOI", so_luong_d, Decimal("0"),
+                   balance.ton_luong, "defect_record", entry.id,
+                   created_by=current_user.id)
+            entry.warehouse_id = kho.id
+
     db.commit()
     db.refresh(entry)
     return _to_response(entry, db)
@@ -157,12 +179,16 @@ def list_kho_ao_phoi(
     return results
 
 
+_IN_STOCK_STATES = {'cho_xu_ly', 'tan_dung'}
+_OUT_STATES = {'ban_phe', 'da_xu_ly', 'huy'}
+
+
 @router.patch("/{entry_id}/trang-thai")
 def update_trang_thai(
     entry_id: int,
     body: UpdateTrangThaiIn,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     allowed = {'ban_phe', 'tan_dung', 'da_xu_ly', 'huy'}
     if body.trang_thai not in allowed:
@@ -170,12 +196,29 @@ def update_trang_thai(
     entry = db.get(DefectRecord, entry_id)
     if not entry or entry.khau != KHAU:
         raise HTTPException(404, "Không tìm thấy bản ghi kho ảo phôi")
+
+    old_trang_thai = entry.trang_thai
     entry.trang_thai = body.trang_thai
     if body.ghi_chu is not None:
         entry.ghi_chu = body.ghi_chu
     if body.trang_thai == 'tan_dung' and body.production_order_id_tan_dung:
         entry.production_order_id_tan_dung = body.production_order_id_tan_dung
     entry.updated_at = datetime.now(timezone.utc)
+
+    # Xuất khỏi kho TAN_DUNG khi chuyển từ trạng thái "còn trong kho" sang "đã xử lý"
+    if (body.trang_thai in _OUT_STATES and old_trang_thai in _IN_STOCK_STATES
+            and entry.warehouse_id):
+        item = (db.get(PhieuNhapPhoiSongItem, entry.ref_id)
+                if entry.ref_type == REF_TYPE else None)
+        ten_hang = (f"{int(item.chieu_kho)}x{int(item.chieu_cat)}"
+                    if item and item.chieu_kho and item.chieu_cat else "Phôi lỗi")
+        so_luong_d = Decimal(str(entry.so_luong))
+        balance = get_or_create_balance(db, entry.warehouse_id, ten_hang=ten_hang, don_vi="Tấm")
+        xuat_balance(balance, so_luong_d, ten_hang)
+        log_tx(db, entry.warehouse_id, "XUAT_PHOI_LOI", so_luong_d,
+               balance.don_gia_binh_quan, balance.ton_luong, "defect_record", entry_id,
+               created_by=current_user.id, ghi_chu=body.ghi_chu)
+
     db.commit()
     db.refresh(entry)
     return _to_response(entry, db)

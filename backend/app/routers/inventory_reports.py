@@ -147,6 +147,7 @@ def ton_kho_tp_lsx(
             ProductionOutput.production_order_id,
             func.coalesce(func.sum(ProductionOutput.so_luong_nhap), 0).label("tong_nhap"),
             func.max(ProductionOutput.dvt).label("dvt"),
+            func.min(ProductionOutput.ngay_nhap).label("ngay_nhap_kho"),
         )
         .group_by(ProductionOutput.production_order_id)
         .all()
@@ -159,6 +160,7 @@ def ton_kho_tp_lsx(
         r.production_order_id: {
             "tong_nhap": float(r.tong_nhap),
             "dvt": r.dvt or "Thùng",
+            "ngay_nhap_kho": r.ngay_nhap_kho.isoformat() if r.ngay_nhap_kho else None,
         }
         for r in nhap_rows
     }
@@ -414,6 +416,7 @@ def ton_kho_tp_lsx(
             "phap_nhan_id": o.phap_nhan_id,
             "ten_phap_nhan_sx": pn_map.get(o.phap_nhan_id) or (o.phap_nhan.ten_viet_tat if o.phap_nhan else None),
             "ten_kho_hien_tai": ", ".join(kho_by_order.get(o.id, [])) or None,
+            "ngay_nhap_kho": nh.get("ngay_nhap_kho"),
             "phieu_xuat_gan_nhat": phieu_xuat_map.get(o.id),
             "loai_thung": first_item.loai_thung if first_item else None,
             "kho_tt": float(first_item.kho_tt) if first_item and first_item.kho_tt else None,

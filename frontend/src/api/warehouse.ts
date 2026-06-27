@@ -532,6 +532,7 @@ export interface TonKhoTPRow {
   phap_nhan_id: number | null
   ten_phap_nhan_sx: string | null
   ten_kho_hien_tai: string | null
+  ngay_nhap_kho?: string | null
   phieu_xuat_gan_nhat: { so_phieu: string; ngay_xuat: string } | null
   loai_thung?: string | null
   kho_tt?: number | null

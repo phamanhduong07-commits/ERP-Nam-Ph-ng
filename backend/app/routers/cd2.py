@@ -2590,6 +2590,7 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
             PhieuNhapPhoiSong.production_order_id,
             func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_tam), 0).label("tong_nhap"),
             func.min(PhieuNhapPhoiSong.warehouse_id).label("warehouse_id"),
+            func.min(PhieuNhapPhoiSong.ngay).label("ngay_nhap_kho"),
         )
         .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
         .group_by(PhieuNhapPhoiSong.production_order_id)
@@ -2599,7 +2600,7 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
         return []
 
     order_ids = [r.production_order_id for r in nhap_rows]
-    nhap_map = {r.production_order_id: (float(r.tong_nhap or 0), r.warehouse_id) for r in nhap_rows}
+    nhap_map = {r.production_order_id: (float(r.tong_nhap or 0), r.warehouse_id, r.ngay_nhap_kho) for r in nhap_rows}
 
     # 2. Tổng xuất phôi (qua PhieuXuatPhoiItem → ProductionOrderItem)
     xuat_rows = (
@@ -2657,7 +2658,7 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
     wh_map = {w.id: w for w in warehouses}
 
     results = []
-    for order_id_val, (tong_nhap, warehouse_id) in nhap_map.items():
+    for order_id_val, (tong_nhap, warehouse_id, ngay_nhap_kho) in nhap_map.items():
         order = order_map.get(order_id_val)
         if not order:
             continue
@@ -2706,6 +2707,7 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
             "ton_kho_tai_nguon": max(0.0, tong_nhap - tong_chuyen),
             "ton_kho_tai_cd2": max(0.0, tong_chuyen - tong_xuat),
             "don_gia_noi_bo": float(order.don_gia_noi_bo) if getattr(order, "don_gia_noi_bo", None) else None,
+            "ngay_nhap_kho": ngay_nhap_kho.isoformat() if ngay_nhap_kho else None,
             "phieu_in_hien_tai": {
                 "so_phieu": phieu_in.so_phieu,
                 "trang_thai": phieu_in.trang_thai,

@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -27,6 +27,9 @@ class PhieuNhapPhoiSong(Base):
     session_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("production_sessions.id", ondelete="SET NULL"), nullable=True
     )
+    phoi_du_trang_thai: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # NULL=chưa xử lý | 'da_nhap_kho_tan_dung' | 'giao_sx' | 'giao_khach' | 'huy'
+    phoi_du_ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

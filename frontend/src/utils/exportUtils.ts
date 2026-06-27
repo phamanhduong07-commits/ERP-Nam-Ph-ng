@@ -928,68 +928,86 @@ export async function printProductionTagBatch(data: Record<string, unknown>, tot
   setTimeout(() => { win.print(); win.close() }, 300)
 }
 
-export async function printPhoiDuTag(data: {
-  so_lenh: string
-  ten_san_pham: string
-  ten_khach_hang: string
-  so_don_hang: string
-  kho_cat: string
-  so_lop_song: string
-  phan_xuong: string
-  so_luong_du: number
-  ngay_sx: string
-  ca: string
-  ghi_chu?: string
-}, totalTem: number) {
+export async function printPhoiDuTag(data: Record<string, unknown>, totalTem: number) {
   if (totalTem < 1) return
-  const qrDataUrl = await QRCode.toDataURL(data.so_lenh || 'N/A', { margin: 1 })
-  const { so_lenh, ten_san_pham, ten_khach_hang, so_don_hang, kho_cat, so_lop_song, phan_xuong, so_luong_du, ngay_sx, ca, ghi_chu = '' } = data
-  const tenFontSize = ten_san_pham.length > 60 ? 11 : ten_san_pham.length > 40 ? 13 : ten_san_pham.length > 25 ? 15 : 18
+  const qrDataUrl = await QRCode.toDataURL(String(data.so_lenh || 'N/A'), { margin: 1 })
+  const soLuongDu = data.so_luong_du as number
 
-  const makeTable = (idx: number, total: number) => `<table>
+  const makeTable = (ghiChu: string) => `<table>
   <colgroup>
-    <col style="width:12%"><col style="width:22%"><col style="width:12%">
-    <col style="width:18%"><col style="width:7%"><col style="width:29%">
+    <col style="width:12%"><col style="width:17%"><col style="width:12%">
+    <col style="width:17%"><col style="width:13%"><col style="width:29%">
   </colgroup>
   <tr>
-    <td colspan="5" class="hdr-du">&#9888; PHÔI DƯ — TỒN KHO</td>
-    <td rowspan="3" class="qr"><img src="${qrDataUrl}"><div class="qr-num">${so_lenh}</div></td>
+    <td colspan="5" class="hdr-du">PHÔI DƯ — TỒN KHO</td>
+    <td rowspan="4" class="qr"><img src="${qrDataUrl}"><div class="qr-num">${data.so_lenh || ''}</div></td>
   </tr>
   <tr>
-    <td class="lbl">SỐ LỆNH</td>
-    <td colspan="2" class="vxl">${so_lenh}</td>
-    <td class="lbl">NGÀY SX</td>
-    <td class="vmd">${ngay_sx}</td>
+    <td class="lbl" style="height:38px">KHÁCH<br>HÀNG</td>
+    <td colspan="2" class="vxl">${data.ten_khach_hang || ''}</td>
+    <td class="lbl">NGÀY GIAO<br>VỀ CỦ CHI</td>
+    <td class="vmd">${data.ngay_giao_cu_chi || ''}</td>
   </tr>
   <tr>
-    <td class="lbl">XƯỞNG SX</td>
-    <td colspan="2" class="vlg">${phan_xuong}</td>
-    <td class="lbl">CA</td>
-    <td class="vmd">${ca}</td>
-  </tr>
-  <tr>
-    <td class="lbl">KHÁCH<br>HÀNG</td>
-    <td colspan="2" class="vlg">${ten_khach_hang}</td>
     <td class="lbl">SỐ ĐH</td>
-    <td colspan="2" class="vmd">${so_don_hang}</td>
+    <td class="val">${data.so_don_hang || ''}</td>
+    <td rowspan="2" class="lbl">LOẠI /<br>SÓNG</td>
+    <td rowspan="2" class="vlg">${data.loai_sp || ''}</td>
+    <td class="vxl">${data.song || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">SỐ PO KH</td>
+    <td class="val">${data.so_po_kh || ''}</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td class="lbl">XƯỞNG<br>SX</td>
+    <td class="vlg">${data.phan_xuong || 'Nam Phương'}</td>
+    <td class="lbl">CÁN LẰN<br>(QCCL)</td>
+    <td class="vmd" style="font-size:13px;line-height:1.6">${String(data.qccl || '').split('+').join('<br>')}</td>
+    <td class="lbl">Cán<br>màng</td>
+    <td class="lbl">Chống<br>thấm</td>
+  </tr>
+  <tr>
+    <td class="lbl">NSX MÁY<br>SÓNG</td>
+    <td class="val" style="text-align:center">${data.ngay_chay_song || ''}</td>
+    <td class="lbl">NGÀY GIAO<br>CHO KH</td>
+    <td class="vlg" style="font-size:20px">${data.ngay_giao_kh || ''}</td>
+    <td class="val" style="text-align:center">${data.can_mang || 'Không'}</td>
+    <td class="val" style="text-align:center">${data.chong_tham || 'Không'}</td>
+  </tr>
+  <tr>
+    <td class="lbl">CÔNG<br>ĐOẠN SX</td>
+    <td colspan="3" class="vlg">${data.cong_doan || ''}</td>
+    <td colspan="2" class="vmd">${data.loai_lan || '+ 0'}</td>
   </tr>
   <tr>
     <td class="lbl">TÊN SẢN<br>PHẨM</td>
-    <td colspan="5" class="vxl" style="font-size:${tenFontSize}px;height:50px;line-height:1.4;white-space:normal;word-break:break-word">${ten_san_pham}</td>
+    <td colspan="5" class="vxl" style="font-size:${
+      String(data.ten_san_pham || '').length > 60 ? 11 :
+      String(data.ten_san_pham || '').length > 40 ? 13 :
+      String(data.ten_san_pham || '').length > 25 ? 15 : 18
+    }px;height:52px;line-height:1.4;white-space:normal;word-break:break-word">${data.ten_san_pham || ''}</td>
   </tr>
   <tr>
-    <td class="lbl">KÍCH<br>THƯỚC</td>
-    <td colspan="2" class="vlg">${kho_cat}</td>
-    <td class="lbl">LỚP /<br>SÓNG</td>
-    <td colspan="2" class="vlg">${so_lop_song}</td>
+    <td class="lbl">SL PHÔI</td>
+    <td colspan="5" class="vxl">${data.sl_tam_lon || ''}</td>
   </tr>
   <tr>
-    <td class="lbl">SỐ LƯỢNG<br>DƯ</td>
-    <td colspan="5" class="v3xl">${so_luong_du.toLocaleString('vi-VN')} phôi</td>
+    <td class="lbl">SL CON</td>
+    <td colspan="5" class="vxl">${data.sl_tam_nho || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">SL DƯ</td>
+    <td colspan="5" class="v2xl" style="font-size:28px;color:#E65100">${soLuongDu.toLocaleString('vi-VN')} phôi</td>
+  </tr>
+  <tr>
+    <td class="lbl">BỘ PHẬN</td>
+    <td colspan="5" class="vmd" style="height:32px">${data.bo_phan || ''}</td>
   </tr>
   <tr>
     <td class="lbl">GHI CHÚ</td>
-    <td colspan="5" class="val">Tem ${idx + 1}/${total}${ghi_chu ? ' | ' + ghi_chu : ''}</td>
+    <td colspan="5" class="val">${ghiChu}</td>
   </tr>
 </table>`
 
@@ -1001,7 +1019,7 @@ export async function printPhoiDuTag(data: {
     .pg:last-child { page-break-after: auto; }
     table { width: 100%; border-collapse: collapse; border: 2px solid #000; table-layout: fixed; }
     td { border: 1px solid #000; padding: 3px 5px; vertical-align: middle; word-break: break-word; }
-    .hdr-du { font-size: 22px; font-weight: bold; letter-spacing: 2px; text-align: center;
+    .hdr-du { font-size: 26px; font-weight: bold; letter-spacing: 3px; text-align: center;
               background: #E65100; color: #fff; padding: 7px 4px; }
     .lbl  { font-size: 9px; font-weight: bold; text-transform: uppercase; text-align: center;
             background: #f0f0f0; line-height: 1.4; color: #000; }
@@ -1009,17 +1027,18 @@ export async function printPhoiDuTag(data: {
     .vmd  { font-size: 15px; font-weight: bold; text-align: center; }
     .vlg  { font-size: 19px; font-weight: bold; text-align: center; }
     .vxl  { font-size: 22px; font-weight: bold; text-align: center; }
-    .v3xl { font-size: 34px; font-weight: bold; text-align: center; color: #E65100; padding: 6px 0; }
+    .v2xl { font-size: 26px; font-weight: bold; text-align: center; }
     .qr   { text-align: center; vertical-align: middle; padding: 4px; }
     .qr img { width: 108px; height: 108px; display: block; margin: 0 auto 3px; }
     .qr-num { font-size: 10px; font-weight: bold; }
   `
 
-  const pages = Array.from({ length: totalTem }, (_, i) =>
-    `<div class="pg">${makeTable(i, totalTem)}</div>`,
-  ).join('\n')
+  const pages = Array.from({ length: totalTem }, (_, i) => {
+    const ghiChu = `Tem ${i + 1}/${totalTem}${data.ghi_chu ? ' | ' + data.ghi_chu : ''}`
+    return `<div class="pg">${makeTable(ghiChu)}</div>`
+  }).join('\n')
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Phoi Du - ${so_lenh}</title><style>${css}</style></head><body>${pages}</body></html>`
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Phoi Du</title><style>${css}</style></head><body>${pages}</body></html>`
   const win = window.open('', '_blank')
   if (!win) return
   win.document.write(html)

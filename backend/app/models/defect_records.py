@@ -24,6 +24,9 @@ class DefectRecord(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, server_default="cho_xu_ly")
     # cho_xu_ly | ban_phe | tan_dung | da_xu_ly | huy
     ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
+    warehouse_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("warehouses.id"), nullable=True
+    )
     production_order_id_tan_dung: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("production_orders.id"), nullable=True
     )
@@ -39,3 +42,4 @@ class DefectRecord(Base):
 
     lsx_tan_dung = relationship("ProductionOrder", foreign_keys=[production_order_id_tan_dung])
     creator = relationship("User", foreign_keys=[created_by])
+    warehouse = relationship("Warehouse", foreign_keys=[warehouse_id])

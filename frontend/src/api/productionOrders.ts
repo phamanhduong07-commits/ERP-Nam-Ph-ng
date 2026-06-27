@@ -273,7 +273,9 @@ export interface PhieuNhapPhoiSongListItem extends PhieuNhapPhoiSong {
   tong_so_tam: number
   tong_so_luong_thuc_te: number
   tong_so_luong_loi: number
-  session_id: number | null  // ID phiên sản xuất được gán (null = chưa gán)
+  session_id: number | null
+  phoi_du_trang_thai: string | null
+  phoi_du_ghi_chu: string | null
 }
 
 export interface NgungPhoiSongResponse {
@@ -349,10 +351,18 @@ export const productionOrdersApi = {
       `/production-orders/${orderId}/chuyen-mua-phoi`
     ),
 
+  huyMuaPhoi: (orderId: number) =>
+    client.patch<{ ok: boolean; trang_thai: string; so_lenh: string }>(
+      `/production-orders/${orderId}/huy-mua-phoi`
+    ),
+
   pushToCD2: (orderId: number) =>
     client.post<{ ok: boolean; data: unknown; payload_sent: unknown }>(
       `/production-orders/${orderId}/push-to-cd2`,
     ),
+
+  nhapPhoiDuKho: (phieuId: number, data: { so_luong_du: number; loai_xu_ly: string; ghi_chu?: string }) =>
+    client.post<PhieuNhapPhoiSongListItem>(`/production-orders/phieu/${phieuId}/nhap-phoi-du-kho`, data),
 
   printHtml: (orderId: number) =>
     client.get<string>(`/production-orders/${orderId}/print`, { responseType: 'text' }),

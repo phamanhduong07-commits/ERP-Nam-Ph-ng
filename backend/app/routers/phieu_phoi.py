@@ -22,6 +22,7 @@ from app.models.sales import SalesOrder
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
+from app.models.phieu_tra_hang import PhieuTraHang, PhieuTraHangItem
 from app.models.warehouse_doc import PhieuChuyenKho, PhieuChuyenKhoItem
 from app.services.carton_metrics import dec_or_zero, _to_hop_song, song_take_up, standard_thickness_m
 
@@ -418,6 +419,7 @@ def ton_kho_lsx(
             func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_tam), 0).label("tong_nhap_sx"),
             func.max(PhieuNhapPhoiSongItem.chieu_kho).label("chieu_kho"),
             func.max(PhieuNhapPhoiSongItem.chieu_cat).label("chieu_cat"),
+            func.min(PhieuNhapPhoiSong.ngay).label("ngay_nhap_kho"),
         )
         .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
     )
@@ -472,14 +474,38 @@ def ton_kho_lsx(
         PhieuChuyenKhoItem.production_order_id, PhieuChuyenKho.warehouse_nhap_id
     ).all()
 
+    # 5. Khách trả phôi (tốt) — confirmed only
+    tra_khach_q = (
+        db.query(
+            PhieuTraHang.production_order_id,
+            PhieuTraHang.warehouse_id,
+            func.coalesce(func.sum(PhieuTraHangItem.so_luong), 0).label("tong_tra"),
+        )
+        .join(PhieuTraHangItem, PhieuTraHangItem.phieu_id == PhieuTraHang.id)
+        .filter(
+            PhieuTraHang.loai_hang == "PHOI",
+            PhieuTraHang.trang_thai == "confirmed",
+            PhieuTraHangItem.tinh_trang == "tot",
+        )
+    )
+    if allowed_order_ids is not None:
+        tra_khach_q = tra_khach_q.filter(PhieuTraHang.production_order_id.in_(allowed_order_ids))
+    tra_khach_rows = tra_khach_q.group_by(
+        PhieuTraHang.production_order_id, PhieuTraHang.warehouse_id
+    ).all()
+
     # 4. Gom tất cả tổ hợp (LSX, Kho) có phát sinh
     stats = {}  # (order_id, wh_id) -> data
 
     for r in nhap_rows:
         key = (r.production_order_id, r.warehouse_id)
         stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0, "chuyen_den": 0.0,
-                         "chieu_kho": r.chieu_kho, "chieu_cat": r.chieu_cat})
+                         "chieu_kho": r.chieu_kho, "chieu_cat": r.chieu_cat, "ngay_nhap_kho": None})
         stats[key]["nhap"] += float(r.tong_nhap_sx)
+        if r.ngay_nhap_kho:
+            cur = stats[key].get("ngay_nhap_kho")
+            if cur is None or r.ngay_nhap_kho < cur:
+                stats[key]["ngay_nhap_kho"] = r.ngay_nhap_kho
 
     for r in xuat_rows:
         key = (r.production_order_id, r.warehouse_id)
@@ -498,6 +524,13 @@ def ton_kho_lsx(
         stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0,
                          "chuyen_den": 0.0, "chieu_kho": None, "chieu_cat": None})
         stats[key]["chuyen_den"] += float(r.tong_chuyen_nhap)
+
+    for r in tra_khach_rows:
+        key = (r.production_order_id, r.warehouse_id)
+        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0,
+                         "chuyen_den": 0.0, "tra_khach": 0.0, "chieu_kho": None, "chieu_cat": None})
+        stats[key].setdefault("tra_khach", 0.0)
+        stats[key]["tra_khach"] += float(r.tong_tra)
 
     if not stats:
         return []
@@ -545,11 +578,12 @@ def ton_kho_lsx(
         if not order or not wh:
             continue
 
-        # Tồn = (Nhập SX + Nhập Chuyển) - (Xuất SX + Xuất Chuyển)
-        ton_kho = round((data["nhap"] + data["chuyen_den"]) - (data["xuat"] + data["chuyen_di"]), 3)
+        # Tồn = (Nhập SX + Nhập Chuyển + Trả KH tốt) - (Xuất SX + Xuất Chuyển)
+        tra_khach = data.get("tra_khach", 0.0)
+        ton_kho = round((data["nhap"] + data["chuyen_den"] + tra_khach) - (data["xuat"] + data["chuyen_di"]), 3)
 
         # Nếu tồn <= 0 và không có nhập thì bỏ qua
-        if ton_kho <= 0 and (data["nhap"] + data["chuyen_den"]) == 0:
+        if ton_kho <= 0 and (data["nhap"] + data["chuyen_den"] + tra_khach) == 0:
             continue
 
         first = order.items[0] if order.items else None
@@ -587,8 +621,9 @@ def ton_kho_lsx(
             "ten_khach_hang": ten_khach_hang,
             "tong_nhap": data["nhap"] + data["chuyen_den"],
             "tong_xuat": data["xuat"] + data["chuyen_di"],
+            "tong_tra_khach": tra_khach,
             "ton_kho": ton_kho,
-            "ton_kho_tai_nguon": max(0.0, round(data["nhap"] - data["chuyen_di"], 3)),
+            "ton_kho_tai_nguon": max(0.0, round(data["nhap"] + tra_khach - data["chuyen_di"], 3)),
             "ton_kho_tai_cd2": max(0.0, round(data["chuyen_den"] - data["xuat"], 3)),
             "warehouse_id": wh_id,
             "ten_kho": wh.ten_kho,
@@ -597,6 +632,7 @@ def ton_kho_lsx(
             "dien_tich": float(phoi_area),
             "trong_luong": float(trong_luong),
             "the_tich": float(the_tich),
+            "ngay_nhap_kho": data["ngay_nhap_kho"].isoformat() if data.get("ngay_nhap_kho") else None,
             "phieu_in_hien_tai": active_map.get(order_id),
             "phan_xuong_id": wh.phan_xuong_id,
             "ten_phan_xuong": px_wh.ten_xuong.replace("Xưởng ", "Kho phôi ") if px_wh and px_wh.ten_xuong else None,

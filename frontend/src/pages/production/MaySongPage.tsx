@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Col, DatePicker, Divider, Form, Input, InputNumber,
-  message, Modal, Popconfirm, Progress, Row, Segmented, Select, Space, Spin, Table, Tabs, Tag,
+  message, Modal, Popconfirm, Progress, Radio, Row, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag,
   TimePicker, Tooltip, Typography,
 } from 'antd'
 import { CaretRightOutlined, CopyOutlined, LinkOutlined, PauseOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
@@ -916,8 +916,8 @@ export default function MaySongPage() {
   const [histSearchLenh, setHistSearchLenh] = useState('')
   const [inTemTabSearch, setInTemTabSearch] = useState('')
   const [inTemTabLoading, setInTemTabLoading] = useState(false)
-  const [phoiDuTuNgay, setPhoiDuTuNgay] = useState<string>(() => dayjs().startOf('month').format('YYYY-MM-DD'))
-  const [phoiDuDenNgay, setPhoiDuDenNgay] = useState<string>(() => dayjs().format('YYYY-MM-DD'))
+  const [phoiDuTuNgay, setPhoiDuTuNgay] = useState<string | null>(null)
+  const [phoiDuDenNgay, setPhoiDuDenNgay] = useState<string | null>(null)
   const [phoiDuPrintModal, setPhoiDuPrintModal] = useState<{
     phieu: PhieuNhapPhoiSongListItem
     order: ProductionOrder | null
@@ -925,6 +925,13 @@ export default function MaySongPage() {
     soTem: number
   } | null>(null)
   const [phoiDuPrintLoading, setPhoiDuPrintLoading] = useState(false)
+  const [phoiDuShowAll, setPhoiDuShowAll] = useState(false)
+  const [phoiDuXuLyModal, setPhoiDuXuLyModal] = useState<{
+    phieu: PhieuNhapPhoiSongListItem
+    excessQty: number
+  } | null>(null)
+  const [xuLyLoaiXuLy, setXuLyLoaiXuLy] = useState<string>('da_nhap_kho_tan_dung')
+  const [xuLyGhiChu, setXuLyGhiChu] = useState<string>('')
   const qc = useQueryClient()
 
   // ─── Queries ───────────────────────────────────────────────────────────────
@@ -1047,7 +1054,10 @@ export default function MaySongPage() {
   const { data: phoiDuPhieuList = [], isLoading: phoiDuPhieuLoading } = useQuery({
     queryKey: ['phoi-du-phieu', phoiDuTuNgay, phoiDuDenNgay],
     queryFn: () =>
-      productionOrdersApi.listAllPhieu({ tu_ngay: phoiDuTuNgay, den_ngay: phoiDuDenNgay }).then(r => r.data),
+      productionOrdersApi.listAllPhieu({
+        ...(phoiDuTuNgay ? { tu_ngay: phoiDuTuNgay } : {}),
+        ...(phoiDuDenNgay ? { den_ngay: phoiDuDenNgay } : {}),
+      }).then(r => r.data),
     enabled: activeTab === 'phoi_du',
     staleTime: 60_000,
   })
@@ -1061,8 +1071,9 @@ export default function MaySongPage() {
         return { phieu: p, slKh, slTt, excess }
       })
       .filter(r => r.excess > 0.001)
+      .filter(r => phoiDuShowAll || !r.phieu.phoi_du_trang_thai)
       .sort((a, b) => b.phieu.ngay.localeCompare(a.phieu.ngay))
-  }, [phoiDuPhieuList])
+  }, [phoiDuPhieuList, phoiDuShowAll])
 
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
@@ -1252,27 +1263,52 @@ export default function MaySongPage() {
     const modal = phoiDuPrintModal
     if (!modal) return
     const { phieu, order, excessQty, soTem } = modal
-    const oi     = order?.items[0]
-    const item0  = phieu.items[0]
-    const khoCm  = item0?.chieu_kho  != null ? String(item0.chieu_kho)  : '?'
-    const catCm  = item0?.chieu_cat  != null ? String(item0.chieu_cat)  : '?'
-    const soLop  = item0?.so_lop ?? oi?.so_lop ?? null
-    const toHopSong = oi?.to_hop_song ?? ''
+    const oi    = order?.items[0]
+    const item0 = phieu.items[0]
+    const khoCm = item0?.chieu_kho != null ? String(item0.chieu_kho) : '?'
+    const catCm = item0?.chieu_cat != null ? String(item0.chieu_cat) : '?'
+    const _LAN: Record<string, string> = { lan_bang: '+ 0', lan_am_duong: '+ -', bang: '+ 0', am_duong: '+ -', '+ 0': '+ 0', '+ -': '+ -' }
+    const loaiLanLabel = oi?.loai_lan ? (_LAN[oi.loai_lan] ?? oi.loai_lan) : null
     await printPhoiDuTag({
-      so_lenh:        phieu.so_lenh ?? '',
-      ten_san_pham:   item0?.ten_hang ?? oi?.ten_hang ?? '',
-      ten_khach_hang: order?.ten_khach_hang ?? '',
-      so_don_hang:    order?.so_don ?? '',
-      kho_cat:        `${khoCm} × ${catCm} cm`,
-      so_lop_song:    `${soLop ?? '?'}L / ${toHopSong}`,
-      phan_xuong:     order?.ten_phan_xuong ?? 'Nam Phương',
-      so_luong_du:    excessQty,
-      ngay_sx:        phieu.ngay,
-      ca:             phieu.ca ?? '',
-      ghi_chu:        phieu.ghi_chu ?? '',
+      so_lenh:          phieu.so_lenh ?? '',
+      ten_khach_hang:   order?.ten_khach_hang ?? '',
+      so_don_hang:      order?.so_don ?? '',
+      so_po_kh:         order?.so_po_kh ?? '',
+      loai_sp:          oi?.loai_thung ?? '',
+      song:             oi?.to_hop_song ?? '',
+      phan_xuong:       order?.ten_phan_xuong ?? 'Nam Phương',
+      qccl:             oi?.qccl ?? '',
+      ngay_chay_song:   phieu.ngay,
+      ngay_giao_cu_chi: oi?.ngay_giao_hang ?? '',
+      ngay_giao_kh:     order?.ngay_hoan_thanh_ke_hoach ?? '',
+      cong_doan:        oi?.cong_doan ?? '',
+      loai_lan:         loaiLanLabel,
+      ten_san_pham:     item0?.ten_hang ?? oi?.ten_hang ?? '',
+      sl_tam_lon:       `${khoCm} × ${catCm} cm | ${phieu.tong_so_luong_thuc_te.toLocaleString('vi-VN')} phôi TT`,
+      sl_tam_nho:       phieu.tong_so_tam > 0 ? `${phieu.tong_so_tam.toLocaleString('vi-VN')} tấm` : '',
+      can_mang:         'Không',
+      chong_tham:       'Không',
+      bo_phan:          'Máy Sóng',
+      ghi_chu:          phieu.ghi_chu ?? '',
+      so_luong_du:      excessQty,
     }, soTem)
     setPhoiDuPrintModal(null)
   }
+
+  const xuLyPhoiDuMut = useMutation({
+    mutationFn: ({ phieuId, data }: { phieuId: number; data: { so_luong_du: number; loai_xu_ly: string; ghi_chu?: string } }) =>
+      productionOrdersApi.nhapPhoiDuKho(phieuId, data),
+    onSuccess: () => {
+      message.success('Đã xử lý phôi dư')
+      qc.invalidateQueries({ queryKey: ['phoi-du-phieu'] })
+      setPhoiDuXuLyModal(null)
+      setXuLyLoaiXuLy('da_nhap_kho_tan_dung')
+      setXuLyGhiChu('')
+    },
+    onError: (e: unknown) => message.error(
+      (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? 'Lỗi xử lý phôi dư'
+    ),
+  })
 
   // ─── Cột bảng Tab 1 ────────────────────────────────────────────────────────
 
@@ -2227,22 +2263,30 @@ export default function MaySongPage() {
                   <Row gutter={8} style={{ marginBottom: 12 }} align="middle">
                     <Col>
                       <DatePicker
-                        value={dayjs(phoiDuTuNgay)}
-                        onChange={d => setPhoiDuTuNgay(d ? d.format('YYYY-MM-DD') : dayjs().startOf('month').format('YYYY-MM-DD'))}
+                        value={phoiDuTuNgay ? dayjs(phoiDuTuNgay) : null}
+                        onChange={d => setPhoiDuTuNgay(d ? d.format('YYYY-MM-DD') : null)}
                         placeholder="Từ ngày"
                         format="DD/MM/YYYY"
-                        allowClear={false}
                       />
                     </Col>
                     <Col><Text type="secondary">—</Text></Col>
                     <Col>
                       <DatePicker
-                        value={dayjs(phoiDuDenNgay)}
-                        onChange={d => setPhoiDuDenNgay(d ? d.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'))}
+                        value={phoiDuDenNgay ? dayjs(phoiDuDenNgay) : null}
+                        onChange={d => setPhoiDuDenNgay(d ? d.format('YYYY-MM-DD') : null)}
                         placeholder="Đến ngày"
                         format="DD/MM/YYYY"
-                        allowClear={false}
                       />
+                    </Col>
+                    <Col>
+                      <Space size={6}>
+                        <Switch
+                          size="small"
+                          checked={phoiDuShowAll}
+                          onChange={setPhoiDuShowAll}
+                        />
+                        <Text style={{ fontSize: 12 }}>Hiện đã xử lý</Text>
+                      </Space>
                     </Col>
                     {phoiDuPhieuLoading && <Col><Spin size="small" /></Col>}
                     {phoiDuItems.length > 0 && (
@@ -2335,20 +2379,56 @@ export default function MaySongPage() {
                           ),
                         },
                         {
+                          key: 'trang_thai',
+                          title: 'Trạng thái',
+                          width: 130,
+                          render: (_, r) => {
+                            const tt = r.phieu.phoi_du_trang_thai
+                            if (!tt) return <Tag color="orange">Chưa xử lý</Tag>
+                            const MAP: Record<string, [string, string]> = {
+                              da_nhap_kho_tan_dung: ['cyan', 'Nhập kho TDụng'],
+                              giao_sx: ['blue', 'Giao SX'],
+                              giao_khach: ['green', 'Giao khách'],
+                              huy: ['red', 'Huỷ'],
+                            }
+                            const [color, label] = MAP[tt] ?? ['default', tt]
+                            return (
+                              <Tooltip title={r.phieu.phoi_du_ghi_chu ?? undefined}>
+                                <Tag color={color}>{label}</Tag>
+                              </Tooltip>
+                            )
+                          },
+                        },
+                        {
                           key: 'action',
                           title: '',
-                          width: 120,
+                          width: 180,
                           align: 'center',
                           render: (_, r) => (
-                            <Button
-                              size="small"
-                              icon={<PrinterOutlined />}
-                              loading={phoiDuPrintLoading}
-                              onClick={() => handlePhoiDuOpenPrint(r.phieu, r.excess)}
-                              style={{ borderColor: '#E65100', color: '#E65100' }}
-                            >
-                              In tem dư
-                            </Button>
+                            <Space size={4}>
+                              <Button
+                                size="small"
+                                icon={<PrinterOutlined />}
+                                loading={phoiDuPrintLoading}
+                                onClick={() => handlePhoiDuOpenPrint(r.phieu, r.excess)}
+                                style={{ borderColor: '#E65100', color: '#E65100' }}
+                              >
+                                In tem
+                              </Button>
+                              {!r.phieu.phoi_du_trang_thai && (
+                                <Button
+                                  size="small"
+                                  type="primary"
+                                  onClick={() => {
+                                    setPhoiDuXuLyModal({ phieu: r.phieu, excessQty: r.excess })
+                                    setXuLyLoaiXuLy('da_nhap_kho_tan_dung')
+                                    setXuLyGhiChu('')
+                                  }}
+                                >
+                                  Xử lý
+                                </Button>
+                              )}
+                            </Space>
                           ),
                         },
                       ]}
@@ -2461,6 +2541,73 @@ export default function MaySongPage() {
             </>
           )
         })()}
+      </Modal>
+
+      <Modal
+        title={`Xử lý phôi dư — ${phoiDuXuLyModal?.phieu.so_lenh ?? ''}`}
+        open={phoiDuXuLyModal !== null}
+        onCancel={() => setPhoiDuXuLyModal(null)}
+        onOk={() => {
+          const modal = phoiDuXuLyModal
+          if (!modal) return
+          if (!xuLyGhiChu.trim()) { message.warning('Nhập ghi chú xử lý'); return }
+          xuLyPhoiDuMut.mutate({
+            phieuId: modal.phieu.id,
+            data: { so_luong_du: modal.excessQty, loai_xu_ly: xuLyLoaiXuLy, ghi_chu: xuLyGhiChu.trim() },
+          })
+        }}
+        okText="Xác nhận"
+        confirmLoading={xuLyPhoiDuMut.isPending}
+        width={420}
+        destroyOnHidden
+      >
+        {phoiDuXuLyModal && (
+          <div style={{ paddingTop: 8 }}>
+            <Row style={{ marginBottom: 12 }}>
+              <Col span={12}>
+                <Text type="secondary" style={{ fontSize: 11 }}>Số dư</Text>
+                <div>
+                  <Text strong style={{ fontSize: 20, color: '#E65100' }}>
+                    +{phoiDuXuLyModal.excessQty.toLocaleString('vi-VN')}
+                  </Text>
+                  <Text type="secondary" style={{ marginLeft: 4, fontSize: 13 }}>phôi</Text>
+                </div>
+              </Col>
+              <Col span={12}>
+                <Text type="secondary" style={{ fontSize: 11 }}>Sản phẩm</Text>
+                <div><Text strong style={{ fontSize: 13 }}>
+                  {phoiDuXuLyModal.phieu.items[0]?.ten_hang ?? '—'}
+                </Text></div>
+              </Col>
+            </Row>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 6, fontWeight: 600 }}>Xử lý như thế nào?</div>
+              <Radio.Group
+                value={xuLyLoaiXuLy}
+                onChange={e => setXuLyLoaiXuLy(e.target.value)}
+              >
+                <Space direction="vertical" size={6}>
+                  <Radio value="da_nhap_kho_tan_dung">Nhập kho tận dụng (dùng sau)</Radio>
+                  <Radio value="giao_sx">Giao thẳng cho SX khác</Radio>
+                  <Radio value="giao_khach">Giao luôn cho khách</Radio>
+                  <Radio value="huy">Huỷ (loại bỏ)</Radio>
+                </Space>
+              </Radio.Group>
+            </div>
+            <div>
+              <div style={{ marginBottom: 4, fontWeight: 600 }}>
+                Ghi chú <Text type="danger">*</Text>
+              </div>
+              <Input.TextArea
+                value={xuLyGhiChu}
+                onChange={e => setXuLyGhiChu(e.target.value)}
+                placeholder="Ghi chú bắt buộc..."
+                rows={2}
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal

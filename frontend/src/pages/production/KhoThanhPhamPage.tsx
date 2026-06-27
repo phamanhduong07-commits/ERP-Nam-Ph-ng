@@ -287,6 +287,15 @@ export default function KhoThanhPhamPage() {
       render: (v: number) => fmtN(v),
     },
     {
+      title: 'Ngày nhập kho',
+      dataIndex: 'ngay_nhap_kho',
+      width: 110,
+      align: 'center' as const,
+      render: (v: string | null | undefined) => v
+        ? <Text style={{ fontSize: 12 }}>{dayjs(v).format('DD/MM/YYYY')}</Text>
+        : <Text type="secondary">—</Text>,
+    },
+    {
       title: 'Xuất (thùng)',
       dataIndex: 'tong_xuat',
       width: 100,
