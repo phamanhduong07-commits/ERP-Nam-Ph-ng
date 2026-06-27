@@ -50,6 +50,7 @@ interface TanDungItem {
   ghi_chu: string | null
   tong_nhap_phoi: number
   ton_kho_tp: number
+  ton_kho_td: number
 }
 
 interface PhanXuong {
@@ -244,6 +245,28 @@ export default function TanDungPlanPage() {
       render: (v: string | null) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v || '—'}</span> },
     { title: 'SL Tấm', dataIndex: 'so_luong_tam', key: 'so_luong_tam', width: 65, align: 'right',
       render: (v: number | null) => v != null ? Number(v).toLocaleString('vi-VN') : '' },
+    {
+      title: 'Kho TD',
+      dataIndex: 'ton_kho_td',
+      key: 'ton_kho_td',
+      width: 75,
+      align: 'right' as const,
+      render: (v: number, r: TanDungItem) => {
+        if (!v || v <= 0) return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
+        const needed = r.so_luong_tam ?? 0
+        const enough = needed > 0 && v >= needed
+        return (
+          <Tooltip title={needed > 0
+            ? `Cần ${needed.toLocaleString('vi-VN')} tấm — Kho TD có ${v.toLocaleString('vi-VN')}`
+            : `Kho TD: ${v.toLocaleString('vi-VN')} tấm`}
+          >
+            <Text strong style={{ color: enough ? '#389e0d' : '#fa8c16', fontSize: 12 }}>
+              {v.toLocaleString('vi-VN')}
+            </Text>
+          </Tooltip>
+        )
+      },
+    },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', key: 'ghi_chu' },
     {
       title: 'Nhập kho',

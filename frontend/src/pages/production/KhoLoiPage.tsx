@@ -7,7 +7,7 @@ import {
 import { WarningOutlined, ReloadOutlined, DownloadOutlined, PrinterOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import client from '../../api/client'
-import type { PhanXuong } from '../../api/warehouse'
+import type { PhanXuong, TonKho } from '../../api/warehouse'
 import { warehouseApi } from '../../api/warehouse'
 import { exportExcelWithTemplate } from '../../utils/exportUtils'
 import { khoAoPhoiApi, type HangLoiPhoiRow } from '../../api/kho_ao_phoi'
@@ -285,6 +285,8 @@ export default function KhoLoiPage() {
   const [disposalGhiChu, setDisposalGhiChu] = useState<string>('')
   const [disposalLoading, setDisposalLoading] = useState(false)
 
+  const [activeTab, setActiveTab] = useState('loi')
+
   const [phoiDuShowAll, setPhoiDuShowAll] = useState(false)
   const [phoiDuXuLyModal, setPhoiDuXuLyModal] = useState<{ phieu: PhieuNhapPhoiSongListItem; excess: number } | null>(null)
   const [xuLyLoaiXuLy, setXuLyLoaiXuLy] = useState('da_nhap_kho_tan_dung')
@@ -346,6 +348,13 @@ export default function KhoLoiPage() {
   const { data: khoAoTraVeData = [], isLoading: khoAoTraVeLoading } = useQuery<DefectRecordTraVeRow[]>({
     queryKey: ['defect-records-tra-ve', filterParams],
     queryFn: () => client.get<DefectRecordTraVeRow[]>('/defect-records', { params: { khau: 'tra_ve', ...filterParams } }).then(r => r.data),
+    staleTime: 0,
+  })
+
+  const { data: tanDungRows = [], isLoading: tdLoading, refetch: tdRefetch } = useQuery<TonKho[]>({
+    queryKey: ['tan-dung-ton-kho', filterPhanXuongId],
+    queryFn: () => warehouseApi.getTonKho({ loai_kho: 'TAN_DUNG', phan_xuong_id: filterPhanXuongId }).then(r => r.data),
+    enabled: activeTab === 'tan-dung',
     staleTime: 0,
   })
 
@@ -654,9 +663,19 @@ export default function KhoLoiPage() {
             valueStyle={{ fontSize: 18, color: '#52c41a' }}
           />
         </Col>
+        <Col xs={12} sm={4}>
+          <Statistic
+            title="Tồn kho TAN_DUNG"
+            value={tanDungRows.reduce((s, r) => s + r.ton_luong, 0)}
+            formatter={v => fmtN(Number(v))}
+            valueStyle={{ fontSize: 18, color: '#13c2c2' }}
+          />
+        </Col>
       </Row>
 
       <Tabs
+        activeKey={activeTab}
+        onChange={key => setActiveTab(key)}
         items={[
           {
             key: 'loi',
@@ -1120,6 +1139,76 @@ export default function KhoLoiPage() {
             ),
           },
           {
+            key: 'tan-dung',
+            label: `🏭 Kho TAN_DUNG (${tanDungRows.length})`,
+            children: (
+              <>
+                <Row justify="end" style={{ marginBottom: 8 }}>
+                  <Button size="small" icon={<ReloadOutlined />} onClick={() => tdRefetch()}>Làm mới</Button>
+                </Row>
+                <Table<TonKho>
+                  rowKey="id"
+                  size="small"
+                  loading={tdLoading}
+                  dataSource={tanDungRows}
+                  pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} dòng` }}
+                  scroll={{ x: 700 }}
+                  columns={[
+                    {
+                      title: 'Xưởng',
+                      dataIndex: 'ten_phan_xuong',
+                      width: 140,
+                      render: (v: string | null) => v ?? <Text type="secondary">—</Text>,
+                    },
+                    {
+                      title: 'Kho',
+                      dataIndex: 'ten_kho',
+                      width: 200,
+                      render: (v: string) => <Text style={{ fontSize: 12 }}>{v}</Text>,
+                    },
+                    {
+                      title: 'Kích thước (Khổ × Cắt)',
+                      dataIndex: 'ten_hang',
+                      render: (v: string) => <Text strong style={{ fontFamily: 'monospace', fontSize: 13 }}>{v}</Text>,
+                    },
+                    {
+                      title: 'Tồn kho',
+                      dataIndex: 'ton_luong',
+                      width: 110,
+                      align: 'right' as const,
+                      sorter: (a: TonKho, b: TonKho) => a.ton_luong - b.ton_luong,
+                      render: (v: number, r: TonKho) => (
+                        <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
+                          <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 13 }}>{fmtN(v)}</Text>
+                          <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: 'Cập nhật',
+                      dataIndex: 'cap_nhat_luc',
+                      width: 120,
+                      render: (v: string | null) => <Text style={{ fontSize: 12 }}>{fmtDate(v)}</Text>,
+                    },
+                  ]}
+                  summary={() => tanDungRows.length > 0 ? (
+                    <Table.Summary.Row>
+                      <Table.Summary.Cell index={0} colSpan={3}>
+                        <Text strong style={{ fontSize: 12 }}>Tổng: {tanDungRows.length} loại phôi</Text>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={3} align="right">
+                        <Text strong style={{ color: '#389e0d' }}>
+                          {fmtN(tanDungRows.reduce((s, r) => s + r.ton_luong, 0))} tấm
+                        </Text>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={4} />
+                    </Table.Summary.Row>
+                  ) : null}
+                />
+              </>
+            ),
+          },
+          {
             key: 'phoi-loi',
             label: `🟣 Phôi lỗi (${khoAoPhoiData.length})`,
             children: (
@@ -1254,7 +1343,11 @@ export default function KhoLoiPage() {
             .then(() => {
               message.success('Đã xử lý phôi dư')
               queryClient.invalidateQueries({ queryKey: ['phoi-du-phieu'] })
+              queryClient.invalidateQueries({ queryKey: ['tan-dung-ton-kho'] })
               setPhoiDuXuLyModal(null)
+              if (xuLyLoaiXuLy === 'da_nhap_kho_tan_dung') {
+                setActiveTab('tan-dung')
+              }
             })
             .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi xử lý')))
             .finally(() => setXuLyLoading(false))

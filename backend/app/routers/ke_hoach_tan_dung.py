@@ -13,6 +13,8 @@ from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.warehouse_doc import ProductionOutput
+from app.models.master import Warehouse
+from app.models.inventory import InventoryBalance
 
 router = APIRouter(prefix="/api/ke-hoach-tan-dung", tags=["ke-hoach-tan-dung"])
 
@@ -45,6 +47,7 @@ class TanDungItemOut(BaseModel):
     ghi_chu: str | None
     tong_nhap_phoi: int = 0   # số tấm phôi đã nhập (PhieuNhapPhoiSong)
     ton_kho_tp: float = 0.0   # số lượng TP đã nhập kho (ProductionOutput)
+    ton_kho_td: float = 0.0   # tấm phôi khả dụng trong kho TAN_DUNG khớp kích thước
 
     class Config:
         from_attributes = True
@@ -161,6 +164,25 @@ def list_tan_dung(
         )
         tp_map = {r.production_order_id: float(r.tong_nhap) for r in tp_agg}
 
+    # TAN_DUNG inventory per (phan_xuong_id, ten_hang) for dimension matching
+    phan_xuong_ids = list({o.phan_xuong_id for o in orders if o.phan_xuong_id})
+    td_map: dict[tuple[int, str], float] = {}
+    if phan_xuong_ids:
+        td_agg = (
+            db.query(
+                Warehouse.phan_xuong_id,
+                InventoryBalance.ten_hang,
+                func.coalesce(func.sum(InventoryBalance.ton_luong), 0).label("total"),
+            )
+            .join(InventoryBalance, InventoryBalance.warehouse_id == Warehouse.id)
+            .filter(Warehouse.loai_kho == "TAN_DUNG")
+            .filter(Warehouse.phan_xuong_id.in_(phan_xuong_ids))
+            .filter(InventoryBalance.ten_hang.isnot(None))
+            .group_by(Warehouse.phan_xuong_id, InventoryBalance.ten_hang)
+            .all()
+        )
+        td_map = {(r.phan_xuong_id, r.ten_hang): float(r.total) for r in td_agg}
+
     result: list[TanDungItemOut] = []
     for order in orders:
         kh = order.sales_order.customer if order.sales_order else None
@@ -176,6 +198,11 @@ def list_tan_dung(
 
             soi = item.sales_order_item
             qi = soi.quote_item if soi else None
+
+            # Normalize cat "600 × 400" → "600x400" to match InventoryBalance.ten_hang
+            cat_str = _cat(item)
+            cat_key = cat_str.replace(" × ", "x") if cat_str else None
+            ton_kho_td = td_map.get((order.phan_xuong_id, cat_key), 0.0) if (cat_key and order.phan_xuong_id) else 0.0
 
             result.append(TanDungItemOut(
                 production_order_id=order.id,
@@ -205,6 +232,7 @@ def list_tan_dung(
                 ghi_chu=item.ghi_chu or order.ghi_chu,
                 tong_nhap_phoi=nhap_phoi_map.get(order.id, 0),
                 ton_kho_tp=tp_map.get(order.id, 0.0),
+                ton_kho_td=ton_kho_td,
             ))
 
     # Sắp xếp theo ngày giao hàng

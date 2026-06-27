@@ -483,7 +483,7 @@ def _render_print_html(p: PhieuTraHang) -> str:
         )
 
     th_extra = "<th>Khổ (mm)</th><th>Cắt (mm)</th>" if is_phoi else ""
-    colspan_total = 7 if is_phoi else 5
+    colspan_total = 8 if is_phoi else 6
     tong_tien_str = f"{float(tong_tien):,.0f}"
     so_lenh_row = (
         f"<div class='row'><span class='label'>Lệnh SX:</span>"

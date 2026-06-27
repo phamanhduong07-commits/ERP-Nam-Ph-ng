@@ -3,9 +3,12 @@ import {
   Button, Card, DatePicker, Form, Input, InputNumber, message,
   Modal, Popconfirm, Select, Space, Table, Tag, Typography,
 } from 'antd'
-import { PlusOutlined, CheckOutlined, StopOutlined, DeleteOutlined } from '@ant-design/icons'
+import {
+  PlusOutlined, CheckOutlined, StopOutlined, DeleteOutlined,
+  EditOutlined, PrinterOutlined,
+} from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import dayjs from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { phieuTraHangApi } from '../../api/phieu_tra_hang'
 import type { PhieuTraHang, PhieuTraHangCreate, TraHangItem, LoaiHang } from '../../api/phieu_tra_hang'
@@ -13,6 +16,7 @@ import PageLayout from '../../components/PageLayout'
 import api from '../../api/client'
 
 const { Text } = Typography
+const { RangePicker } = DatePicker
 
 const TRANG_THAI_TAG: Record<string, { color: string; label: string }> = {
   draft:     { color: 'default', label: 'Nháp' },
@@ -39,15 +43,26 @@ export default function PhieuTraHangPage() {
   const qc = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
+  const [viewMode, setViewMode] = useState(false)
   const [form] = Form.useForm()
   const [loaiHang, setLoaiHang] = useState<LoaiHang>('PHOI')
   const [items, setItems] = useState<TraHangItem[]>([{ ...DEFAULT_ITEM_PHOI }])
 
+  // ── Filters ───────────────────────────────────────────────────────────────
+  const [filterLoai, setFilterLoai] = useState<LoaiHang | undefined>()
+  const [filterStatus, setFilterStatus] = useState<string | undefined>()
+  const [filterDates, setFilterDates] = useState<[Dayjs, Dayjs] | null>(null)
+
   // ── Data ──────────────────────────────────────────────────────────────────
 
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['phieu-tra-hang'],
-    queryFn: () => phieuTraHangApi.list(),
+    queryKey: ['phieu-tra-hang', filterLoai, filterStatus, filterDates?.[0]?.format('YYYY-MM-DD'), filterDates?.[1]?.format('YYYY-MM-DD')],
+    queryFn: () => phieuTraHangApi.list({
+      loai_hang: filterLoai,
+      trang_thai: filterStatus,
+      tu_ngay: filterDates?.[0].format('YYYY-MM-DD'),
+      den_ngay: filterDates?.[1].format('YYYY-MM-DD'),
+    }),
   })
 
   const { data: customers = [] } = useQuery<SelectOption[]>({
@@ -154,6 +169,7 @@ export default function PhieuTraHangPage() {
 
   const openCreate = () => {
     setEditId(null)
+    setViewMode(false)
     form.resetFields()
     form.setFieldValue('ngay', dayjs())
     form.setFieldValue('loai_hang', 'PHOI')
@@ -165,6 +181,28 @@ export default function PhieuTraHangPage() {
   const openEdit = async (id: number) => {
     const p = await phieuTraHangApi.get(id)
     setEditId(id)
+    setViewMode(false)
+    const lh = p.loai_hang as LoaiHang
+    setLoaiHang(lh)
+    form.setFieldsValue({
+      ngay: dayjs(p.ngay),
+      loai_hang: p.loai_hang,
+      customer_id: p.customer_id,
+      production_order_id: p.production_order_id,
+      warehouse_id: p.warehouse_id,
+      delivery_order_id: p.delivery_order_id,
+      ly_do_tra: p.ly_do_tra,
+      nguoi_giao: p.nguoi_giao,
+      ghi_chu: p.ghi_chu,
+    })
+    setItems(p.items.map(it => ({ ...it })))
+    setModalOpen(true)
+  }
+
+  const openView = async (id: number) => {
+    const p = await phieuTraHangApi.get(id)
+    setEditId(id)
+    setViewMode(true)
     const lh = p.loai_hang as LoaiHang
     setLoaiHang(lh)
     form.setFieldsValue({
@@ -226,7 +264,13 @@ export default function PhieuTraHangPage() {
       dataIndex: 'so_phieu',
       width: 160,
       render: (v, row) => (
-        <Button type="link" style={{ padding: 0 }} onClick={() => openEdit(row.id)}>{v}</Button>
+        <Button
+          type="link"
+          style={{ padding: 0 }}
+          onClick={() => row.trang_thai === 'draft' ? openEdit(row.id) : openView(row.id)}
+        >
+          {v}
+        </Button>
       ),
     },
     { title: 'Ngày', dataIndex: 'ngay', width: 100, render: fmtD },
@@ -274,11 +318,12 @@ export default function PhieuTraHangPage() {
     {
       title: '',
       key: 'actions',
-      width: 180,
+      width: 220,
       render: (_, row) => (
         <Space>
           {row.trang_thai === 'draft' && (
             <>
+              <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(row.id)} />
               <Popconfirm
                 title="Xác nhận phiếu này? Tồn kho và hạch toán sẽ được cập nhật."
                 onConfirm={() => confirmMut.mutate(row.id)}
@@ -310,14 +355,64 @@ export default function PhieuTraHangPage() {
             </>
           )}
           {row.trang_thai === 'confirmed' && (
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {row.confirmed_at ? fmtD(row.confirmed_at) : ''}
-            </Text>
+            <Button
+              size="small"
+              icon={<PrinterOutlined />}
+              onClick={async () => {
+                const token = localStorage.getItem('token')
+                const res = await fetch(`/api/phieu-tra-hang/${row.id}/print`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                })
+                const html = await res.text()
+                const w = window.open('', '_blank')
+                if (w) { w.document.write(html); w.document.close() }
+              }}
+            >
+              In
+            </Button>
           )}
         </Space>
       ),
     },
   ]
+
+  // ── Expand row — items detail ──────────────────────────────────────────────
+
+  const expandedRowRender = (row: PhieuTraHang) => {
+    const isPhoi = row.loai_hang === 'PHOI'
+    type ItemRow = PhieuTraHang['items'][number]
+    const expandCols: ColumnsType<ItemRow> = [
+      ...(isPhoi
+        ? [
+            { title: 'Khổ (mm)', dataIndex: 'chieu_kho', width: 90, align: 'right' as const, render: (v: number) => v ?? '—' },
+            { title: 'Cắt (mm)', dataIndex: 'chieu_cat', width: 90, align: 'right' as const, render: (v: number) => v ?? '—' },
+          ]
+        : [
+            { title: 'Sản phẩm', dataIndex: 'ten_san_pham', render: (v: string) => v || '—' },
+          ]),
+      { title: 'Số lượng', dataIndex: 'so_luong', width: 90, align: 'right' as const, render: fmtN },
+      { title: 'ĐVT', dataIndex: 'don_vi', width: 70 },
+      {
+        title: 'Tình trạng', dataIndex: 'tinh_trang', width: 90,
+        render: (v: string) => (
+          <Tag color={v === 'tot' ? 'green' : 'red'}>{v === 'tot' ? 'Tốt' : 'Lỗi'}</Tag>
+        ),
+      },
+      { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right' as const, render: fmtN },
+      { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 120, align: 'right' as const, render: fmtN },
+      { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string) => v || '' },
+    ]
+    return (
+      <Table
+        rowKey="id"
+        dataSource={row.items ?? []}
+        columns={expandCols}
+        pagination={false}
+        size="small"
+        style={{ margin: '0 48px' }}
+      />
+    )
+  }
 
   // ── Item columns — conditional on loaiHang ────────────────────────────────
 
@@ -328,6 +423,7 @@ export default function PhieuTraHangPage() {
       render: (_, __, idx) => (
         <InputNumber
           size="small" min={0} style={{ width: '100%' }}
+          disabled={viewMode}
           value={items[idx]?.chieu_kho ?? undefined}
           onChange={v => setItemField(idx, 'chieu_kho', v)}
         />
@@ -339,6 +435,7 @@ export default function PhieuTraHangPage() {
       render: (_, __, idx) => (
         <InputNumber
           size="small" min={0} style={{ width: '100%' }}
+          disabled={viewMode}
           value={items[idx]?.chieu_cat ?? undefined}
           onChange={v => setItemField(idx, 'chieu_cat', v)}
         />
@@ -350,6 +447,7 @@ export default function PhieuTraHangPage() {
       render: (_, __, idx) => (
         <InputNumber
           size="small" min={1} style={{ width: '100%' }}
+          disabled={viewMode}
           value={items[idx]?.so_luong}
           onChange={v => setItemField(idx, 'so_luong', v ?? 1)}
         />
@@ -364,6 +462,7 @@ export default function PhieuTraHangPage() {
         <Select
           size="small" style={{ width: 220 }}
           showSearch
+          disabled={viewMode}
           filterOption={(input, opt) =>
             (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
           }
@@ -380,6 +479,7 @@ export default function PhieuTraHangPage() {
       render: (_, __, idx) => (
         <InputNumber
           size="small" min={1} style={{ width: '100%' }}
+          disabled={viewMode}
           value={items[idx]?.so_luong}
           onChange={v => setItemField(idx, 'so_luong', v ?? 1)}
         />
@@ -391,6 +491,7 @@ export default function PhieuTraHangPage() {
       render: (_, __, idx) => (
         <Input
           size="small"
+          disabled={viewMode}
           value={items[idx]?.don_vi ?? 'Thùng'}
           onChange={e => setItemField(idx, 'don_vi', e.target.value)}
         />
@@ -405,6 +506,7 @@ export default function PhieuTraHangPage() {
       render: (_, __, idx) => (
         <Select
           size="small" style={{ width: '100%' }}
+          disabled={viewMode}
           value={items[idx]?.tinh_trang}
           onChange={v => setItemField(idx, 'tinh_trang', v)}
           options={[
@@ -420,6 +522,7 @@ export default function PhieuTraHangPage() {
       render: (_, __, idx) => (
         <InputNumber
           size="small" min={0} style={{ width: '100%' }}
+          disabled={viewMode}
           formatter={v => v ? new Intl.NumberFormat('vi-VN').format(Number(v)) : ''}
           value={items[idx]?.don_gia ?? undefined}
           onChange={v => setItemField(idx, 'don_gia', v)}
@@ -431,21 +534,24 @@ export default function PhieuTraHangPage() {
       render: (_, __, idx) => (
         <Input
           size="small"
+          disabled={viewMode}
           value={items[idx]?.ghi_chu ?? ''}
           onChange={e => setItemField(idx, 'ghi_chu', e.target.value || null)}
         />
       ),
     },
-    {
-      title: '',
-      width: 36,
-      render: (_, __, idx) => (
-        <Button
-          size="small" danger type="text"
-          onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
-        >×</Button>
-      ),
-    },
+    ...(!viewMode
+      ? [{
+          title: '',
+          width: 36,
+          render: (_: unknown, __: unknown, idx: number) => (
+            <Button
+              size="small" danger type="text"
+              onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
+            >×</Button>
+          ),
+        }]
+      : []),
   ]
 
   const itemColumns = [
@@ -454,6 +560,18 @@ export default function PhieuTraHangPage() {
   ]
 
   const defaultItem = loaiHang === 'PHOI' ? { ...DEFAULT_ITEM_PHOI } : { ...DEFAULT_ITEM_TP }
+
+  // ── Modal title & footer ──────────────────────────────────────────────────
+
+  const modalTitle = viewMode
+    ? 'Xem phiếu trả hàng'
+    : editId
+      ? 'Sửa phiếu trả hàng'
+      : 'Tạo phiếu trả hàng'
+
+  const modalFooter = viewMode
+    ? [<Button key="close" onClick={() => setModalOpen(false)}>Đóng</Button>]
+    : undefined
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -466,6 +584,39 @@ export default function PhieuTraHangPage() {
           </Button>
         }
       >
+        {/* Filter bar */}
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Select
+            placeholder="Loại hàng"
+            allowClear
+            style={{ width: 160 }}
+            value={filterLoai}
+            onChange={v => setFilterLoai(v as LoaiHang | undefined)}
+            options={[
+              { value: 'PHOI', label: 'Phôi' },
+              { value: 'THANH_PHAM', label: 'Thành phẩm' },
+            ]}
+          />
+          <Select
+            placeholder="Trạng thái"
+            allowClear
+            style={{ width: 150 }}
+            value={filterStatus}
+            onChange={setFilterStatus}
+            options={[
+              { value: 'draft', label: 'Nháp' },
+              { value: 'confirmed', label: 'Đã xác nhận' },
+              { value: 'huy', label: 'Đã huỷ' },
+            ]}
+          />
+          <RangePicker
+            format="DD/MM/YYYY"
+            value={filterDates}
+            onChange={(dates) => setFilterDates(dates as [Dayjs, Dayjs] | null)}
+            placeholder={['Từ ngày', 'Đến ngày']}
+          />
+        </Space>
+
         <Table
           rowKey="id"
           dataSource={rows}
@@ -473,25 +624,30 @@ export default function PhieuTraHangPage() {
           loading={isLoading}
           size="small"
           pagination={{ pageSize: 50, showSizeChanger: false }}
+          expandable={{
+            expandedRowRender,
+            rowExpandable: (row) => (row.items?.length ?? 0) > 0,
+          }}
         />
       </Card>
 
       <Modal
-        title={editId ? 'Sửa phiếu trả hàng' : 'Tạo phiếu trả hàng'}
+        title={modalTitle}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
-        onOk={handleSubmit}
+        onOk={viewMode ? undefined : handleSubmit}
         okText={editId ? 'Lưu' : 'Tạo'}
         confirmLoading={createMut.isPending || updateMut.isPending}
+        footer={modalFooter}
         width={960}
         destroyOnClose
       >
         <Form form={form} layout="vertical" size="small">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
-            <Form.Item label="Ngày" name="ngay" rules={[{ required: true }]}>
-              <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+            <Form.Item label="Ngày" name="ngay" rules={[{ required: !viewMode }]}>
+              <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} disabled={viewMode} />
             </Form.Item>
-            <Form.Item label="Loại hàng" name="loai_hang" rules={[{ required: true }]} initialValue="PHOI">
+            <Form.Item label="Loại hàng" name="loai_hang" rules={[{ required: !viewMode }]} initialValue="PHOI">
               <Select
                 disabled={!!editId}
                 onChange={handleLoaiHangChange}
@@ -501,9 +657,10 @@ export default function PhieuTraHangPage() {
                 ]}
               />
             </Form.Item>
-            <Form.Item label="Khách hàng" name="customer_id" rules={[{ required: true }]}>
+            <Form.Item label="Khách hàng" name="customer_id" rules={[{ required: !viewMode }]}>
               <Select
                 showSearch
+                disabled={viewMode}
                 filterOption={(input, opt) =>
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                 }
@@ -512,10 +669,10 @@ export default function PhieuTraHangPage() {
               />
             </Form.Item>
             {loaiHang === 'PHOI' ? (
-              <Form.Item label="Lệnh SX" name="production_order_id" rules={[{ required: true, message: 'Trả phôi phải chọn LSX' }]}>
+              <Form.Item label="Lệnh SX" name="production_order_id" rules={[{ required: !viewMode, message: 'Trả phôi phải chọn LSX' }]}>
                 <Select
                   showSearch
-                  disabled={!customerId}
+                  disabled={viewMode || !customerId}
                   filterOption={(input, opt) =>
                     (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                   }
@@ -528,7 +685,7 @@ export default function PhieuTraHangPage() {
                 <Select
                   showSearch
                   allowClear
-                  disabled={!customerId}
+                  disabled={viewMode || !customerId}
                   filterOption={(input, opt) =>
                     (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                   }
@@ -542,19 +699,19 @@ export default function PhieuTraHangPage() {
             <Form.Item
               label={loaiHang === 'PHOI' ? 'Kho nhận phôi tốt' : 'Kho nhận TP'}
               name="warehouse_id"
-              rules={[{ required: true }]}
+              rules={[{ required: !viewMode }]}
             >
-              <Select options={warehouses} placeholder="Chọn kho" />
+              <Select options={warehouses} placeholder="Chọn kho" disabled={viewMode} />
             </Form.Item>
             <Form.Item label="Người giao" name="nguoi_giao">
-              <Input placeholder="Tên người giao hàng" />
+              <Input placeholder="Tên người giao hàng" disabled={viewMode} />
             </Form.Item>
             <Form.Item label="Lý do trả" name="ly_do_tra">
-              <Input placeholder="Lý do khách trả hàng" />
+              <Input placeholder="Lý do khách trả hàng" disabled={viewMode} />
             </Form.Item>
           </div>
           <Form.Item label="Ghi chú" name="ghi_chu">
-            <Input.TextArea rows={2} />
+            <Input.TextArea rows={2} disabled={viewMode} />
           </Form.Item>
 
           <div style={{ marginBottom: 8, fontWeight: 600 }}>
@@ -568,13 +725,15 @@ export default function PhieuTraHangPage() {
             size="small"
             style={{ marginBottom: 8 }}
           />
-          <Button
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => setItems(prev => [...prev, { ...defaultItem }])}
-          >
-            Thêm dòng
-          </Button>
+          {!viewMode && (
+            <Button
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => setItems(prev => [...prev, { ...defaultItem }])}
+            >
+              Thêm dòng
+            </Button>
+          )}
         </Form>
       </Modal>
     </PageLayout>
