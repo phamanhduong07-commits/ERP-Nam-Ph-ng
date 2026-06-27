@@ -424,6 +424,746 @@ const initialDocs = [
   <strong>Mẹo quản lý tối ưu:</strong><br/>
   Hãy xuất Excel báo cáo xăng dầu trên ERP (<code>/hr/logistics</code>) cuối mỗi tháng, đặt cạnh Báo cáo tổng hợp số KM chạy của GPS Bình Minh để phát hiện ngay xe nào đang bị thất thoát dầu nhiều nhất, giúp nhà máy tiết kiệm hàng chục triệu đồng chi phí vận chuyển.
 </div>`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  📐 KỸ THUẬT TÍNH GIÁ — 8 articles đào tạo chuyên sâu
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'calc-0',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '1. Khung Sườn Tư Duy: Từ D×R×C Ra Giá',
+    content: `<p>Trước khi học từng công thức cụ thể, bạn cần nắm vững <strong>1 tư duy nền tảng</strong> và <strong>3 bước bất biến</strong> áp dụng cho mọi loại thùng, hộp, khay trong toàn bộ hệ thống báo giá của Nam Phương.</p>
+
+<h2>Tư Duy Nền Tảng</h2>
+<p><strong>Mọi loại thùng, hộp, khay đều là 1 tờ giấy phẳng được cắt rồi gập lại.</strong></p>
+<p>Bài toán tính giá carton thực chất là: <em>tờ giấy phẳng đó có diện tích bao nhiêu m²?</em> Khi có m²/cái, mọi thứ còn lại (chi phí giấy, gián tiếp, hao hụt, lợi nhuận) đều tính được.</p>
+
+<h2>3 Bước Bất Biến</h2>
+<ol>
+  <li><strong>Bước 1 — Kích thước thành phẩm → Kích thước tờ phẳng:</strong><br/>
+    Từ D × R × C (cm) của thùng mong muốn → áp công thức theo loại → ra <code>kho_kh</code> × <code>dai_kh</code> (cm)
+  </li>
+  <li><strong>Bước 2 — Tính diện tích:</strong><br/>
+    <pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.8;">DT (m²/cái) = kho_kh × dai_kh / 10.000</pre>
+  </li>
+  <li><strong>Bước 3 — Tính giá:</strong><br/>
+    <pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.8;">a  = chi phí giấy    = DT × take_up × ĐL/1000 × đơn_giá_kg
+b  = chi phí gián tiếp  (tra bảng theo số lớp)
+e  = hao hụt         = (a + b) × tỷ_lệ%  (tra bảng theo SL)
+c  = lợi nhuận       = (a + b) × %LN
+d  = gia công add-on (in, bế, bồi, chống thấm...)
+──────────────────────────────────────────────────
+p  = a + b + e + c + d      ← giá cơ bản/cái
+Giá bán = p × 1.12          ← markup cuối cố định</pre>
+  </li>
+</ol>
+
+<h2>Hai Nhóm Gia Công Cần Phân Biệt Ngay</h2>
+<table style="width:100%;border-collapse:collapse;margin:10px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:8px 12px;text-align:left;">Nhóm</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;text-align:left;">Loại</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;text-align:left;">Đặc điểm máy</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;text-align:left;">so_dao</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>Slot-type</strong><br/>(cắt nhiều dao)</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">A1, A3, A5, A7<br/>Gói giữa, Gói sườn<br/>Giấy tấm (TAM)</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Máy sóng cắt liên tục<br/>1 tờ rộng → nhiều mảnh</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;text-align:center;">≥ 1<br/>(floor 180/kho1)</td>
+  </tr>
+  <tr style="background:#fafafa;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>Die-cut</strong><br/>(bế khuôn)</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">HOP_CAI, HOP_GIAY<br/>HOP_PIZZA, KHAY...</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Máy bế cắt 1 lần<br/>Khuôn riêng từng SP</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;text-align:center;"><strong>= 1</strong><br/>(luôn luôn)</td>
+  </tr>
+</table>
+
+<div class="doc-alert doc-tip">
+  <strong>Quy tắc 80/20:</strong> Học thuộc tư duy nền tảng + 3 bước + phân biệt 2 nhóm gia công — đó là 80% kỹ năng cần có để báo giá carton. Các công thức từng loại chỉ là chi tiết kỹ thuật triển khai từ nền tảng này.
+</div>
+
+<div class="doc-alert doc-info">
+  <strong>Ký hiệu dùng xuyên suốt tài liệu:</strong><br/>
+  D = Dài (cm) &nbsp;·&nbsp; R = Rộng (cm) &nbsp;·&nbsp; C = Cao (cm)<br/>
+  DT = Diện tích (m²) &nbsp;·&nbsp; ĐL = Định lượng giấy (g/m²)<br/>
+  kho_kh = khổ kế hoạch &nbsp;·&nbsp; dai_kh = dài kế hoạch
+</div>`
+  },
+
+  {
+    id: 'calc-1',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '2. Thùng Thường A1 & Thùng 1 Nắp A7',
+    content: `<p>A1 (RSC) và A7 (HSC) là 2 loại thùng phổ biến nhất tại Nam Phương — chiếm &gt;70% số lượng đơn hàng. Nắm vững 2 loại này là nền tảng của mọi nhân viên báo giá.</p>
+
+<h2>A1 — Thùng Thường (RSC)</h2>
+<p>4 cánh gập đều, nắp trên và đáy dưới khép kín hoàn toàn. Phù hợp hầu hết hàng hóa.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = R + C + offset    (3L: +0.2 | 5L: +0.4 | 7L: +0.8 cm)
+dai_kh = (D + R) × 2 + 3
+DT kế hoạch = kho_kh × dai_kh / 10.000  m²</pre>
+
+<h3>Cách Đọc Công Thức (Tư Duy Hình Học)</h3>
+<ul>
+  <li><strong>kho_kh = R + C + offset:</strong> Khi gập thùng, tờ giấy theo chiều ngang phải ôm trọn 1 mặt Rộng + 1 mặt Cao. Số <code>offset</code> nhỏ để chừa mép dán, tăng theo số lớp vì giấy dày hơn.</li>
+  <li><strong>dai_kh = (D+R)×2 + 3:</strong> Theo chiều dài, tờ giấy phải gập đủ 2 vòng chu vi (Dài + Rộng) × 2, cộng 3 cm chừa mép dán chồng lên nhau.</li>
+</ul>
+
+<h3>Ví Dụ — Thùng 60×40×35 cm, 5 lớp</h3>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 40 + 35 + 0.4 = 75.4 cm
+dai_kh = (60 + 40) × 2 + 3 = 203 cm
+DT = 75.4 × 203 / 10.000 = 1.531 m²/cái</pre>
+
+<h2>A7 — Thùng 1 Nắp (HSC)</h2>
+<p>Chỉ có cánh gập ở 1 đầu (nắp trên), đáy thường là sàn pallet hoặc khay tách rời.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = R/2 + C + offset    (3L: +0.1 | 5L: +0.2 | 7L: +0.4 cm)
+dai_kh = (D + R) × 2 + 3    ← giống hệt A1
+DT = kho_kh × dai_kh / 10.000  m²</pre>
+<p><strong>Khác biệt duy nhất so với A1:</strong> <code>R/2</code> thay vì <code>R</code> ở kho_kh — vì nắp chỉ gập 1 phía, tiết kiệm R/2 giấy theo chiều ngang. A7 luôn nhỏ hơn A1 cùng kích thước.</p>
+
+<h2>Trường Hợp 2 Mảnh (Áp Dụng Cả A1 Lẫn A7)</h2>
+<p>Khi <code>dai_kh &gt; 270 cm</code>, tờ giấy không vào được khổ máy → phải cắt làm 2 mảnh:</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">Điều kiện: (D + R) × 2 + 3 &gt; 270  →  D + R &gt; 133.5 cm
+Khi đó:   dai_kh mỗi mảnh = (D + R) + 3
+DT tổng = 2 × kho_kh × dai_kh / 10.000</pre>
+
+<div class="doc-alert doc-warning">
+  <strong>Thùng xuất khẩu lớn (D+R &gt; 134 cm) bắt buộc làm 2 mảnh.</strong> DT tăng nhẹ do 2 lần dư biên. Xác nhận với xưởng trước khi báo giá — chi phí sản xuất có thể tăng do phải lắp ráp thêm.
+</div>
+
+<div class="doc-alert doc-tip">
+  <strong>Ước lượng nhanh:</strong> A1 vừa (50×35×30) → DT ≈ 0.5–0.7 m²/cái. A1 lớn (80×50×50) → DT ≈ 1.2–1.5 m²/cái. Nhẩm được con số này giúp phát hiện ngay nếu hệ thống tính sai bất thường.
+</div>`
+  },
+
+  {
+    id: 'calc-2',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '3. Thùng Nắp Chồm A3 & Âm Dương A5',
+    content: `<p>A3 và A5 là 2 biến thể của A1 dành cho các yêu cầu đóng gói đặc thù. Hiểu rõ sự khác biệt giúp tư vấn đúng loại cho khách hàng.</p>
+
+<h2>A3 — Thùng Nắp Chồm (OVS)</h2>
+<p>Cánh nắp phủ chồm qua thùng thay vì khép vừa khít. Tạo độ cứng và che kín mép trên.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 2R + C         ← nắp phủ 2 lần chiều Rộng
+dai_kh = (D + R) × 2 + 3  ← giống A1</pre>
+
+<h3>So Sánh A1 vs A3 — Cùng Kích Thước 60×40×35, 5 Lớp</h3>
+<table style="width:100%;border-collapse:collapse;margin:10px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Loại</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">kho_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">dai_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">DT (m²)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">A1</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">40+35+0.4 = 75.4 cm</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">203 cm</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">1.531</td>
+  </tr>
+  <tr style="background:#fff8f0;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>A3</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>2×40+35 = 115 cm</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">203 cm</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>2.335</strong> (+53%)</td>
+  </tr>
+</table>
+<p>A3 tốn giấy hơn A1 rất nhiều. Chỉ dùng khi khách hàng thực sự cần nắp phủ dày (rau củ, thực phẩm ẩm).</p>
+
+<div class="doc-alert doc-warning">
+  <strong>Lỗi thường gặp:</strong> Nhầm A3 với A1 khi nghe "thùng nắp chồm". Hỏi lại: nắp chồm bao nhiêu cm? Nếu chỉ cần che kín — A1 là đủ, tiết kiệm ~53% giấy cho khách hàng.
+</div>
+
+<h2>A5 — Thùng Âm Dương (Nắp Rời + Đáy Rời)</h2>
+<p>2 phần tách rời: đáy (tray) và nắp (lid). Nắp trùm bên ngoài đáy. Dùng cho sản phẩm cao cấp, quà tặng.</p>
+
+<h3>A5_DAY — Phần Đáy</h3>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 2C + R        (gập 2 lần chiều cao theo trục ngang)
+dai_kh = 2C + D        (gập 2 lần chiều cao theo trục dọc)
+DT = kho_kh × dai_kh / 10.000</pre>
+
+<h3>A5_NAP — Phần Nắp (Lớn Hơn Đáy)</h3>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 2C + R + 4    (cộng 4 cm để nắp trùm khít lên đáy)
+dai_kh = 2C + D + 4
+DT = kho_kh × dai_kh / 10.000</pre>
+
+<h3>Tư Duy Hình Học A5</h3>
+<p>Nhìn vào tờ giấy phẳng của đáy: chiều ngang = 2×C (2 thành bên) + R (sàn), chiều dọc = 2×C (2 thành đầu) + D (sàn). Nắp lớn hơn đáy 4 cm mỗi chiều (~2 cm mỗi bên) để trùm vừa khít.</p>
+
+<div class="doc-alert doc-tip">
+  <strong>Quan trọng khi lập báo giá A5:</strong> Luôn tạo <strong>2 dòng sản phẩm riêng</strong> — 1 dòng A5_DAY, 1 dòng A5_NAP. Lý do: đáy và nắp có thể khác số lớp giấy (vd. đáy 5 lớp chịu tải, nắp 3 lớp nhẹ), DT khác nhau hoàn toàn.
+</div>`
+  },
+
+  {
+    id: 'calc-3',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '4. Gói Giữa, Gói Sườn & Giấy Tấm',
+    content: `<p>3 loại đặc biệt này ít gặp hơn nhưng có công thức khá khác biệt so với A1/A3/A5. Cần hiểu logic hình học để không nhầm lẫn.</p>
+
+<h2>GOI_GIUA — Gói Giữa (Bliss-style)</h2>
+<p>Thùng không có đáy và nắp gập liền — 2 tấm bên tách rời, lắp vào thân giữa. Phù hợp hàng nặng, pallet lớn.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 2R + C        ← R đứng theo chiều kho (khác A1!)
+dai_kh = (D + R) × 2   ← không cộng +3 như A1</pre>
+<p><strong>Tư duy:</strong> kho_kh tính theo 2 mặt Rộng + 1 mặt Cao, dai_kh bao 2 vòng (Dài + Rộng) nhưng không cần dư biên dán.</p>
+
+<h2>GOI_SUON — Gói Sườn (Sleeve/Wrap-around)</h2>
+<p>Tờ giấy bao quanh sườn sản phẩm, không có đáy. Tiết kiệm giấy đáng kể, phù hợp hàng xếp trên pallet.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 2R + C
+dai_kh = 2D + 3R        ← 3 lần chiều Rộng — điểm đặc biệt nhất!</pre>
+
+<h3>Tại Sao dai_kh = 2D + 3R?</h3>
+<p>Tờ giấy bao quanh sườn gồm: 1 mặt Dài + 1 mặt Rộng + 1 mặt Dài + 1 mặt Rộng + mép 1 mặt Rộng dán chồng = 2D + 3R. Khác hoàn toàn với thùng thường.</p>
+
+<h3>So Sánh Cùng Kích Thước 60×40×35, 5 lớp</h3>
+<table style="width:100%;border-collapse:collapse;margin:10px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Loại</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">kho_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">dai_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">DT (m²)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">A1</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">75.4</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">203</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">1.531</td>
+  </tr>
+  <tr style="background:#f6fff6;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">GOI_GIUA</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2×40+35 = 115</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">(60+40)×2 = 200</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2.300</td>
+  </tr>
+  <tr style="background:#fff8e6;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">GOI_SUON</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2×40+35 = 115</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2×60+3×40 = 240</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2.760</td>
+  </tr>
+</table>
+
+<h2>TAM — Giấy Tấm Phẳng</h2>
+<p>Tờ phẳng không gập, dùng lót đáy thùng, chia tầng hàng hóa, bảo vệ bề mặt.</p>
+
+<div class="doc-alert doc-warning">
+  <strong>TAM là loại DUY NHẤT tính DT bằng <code>kho_tt</code> (sau khi nhân so_dao), không phải <code>kho_kh</code>:</strong>
+</div>
+
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho1   = R + C + 3
+so_dao = floor(180 / kho1)         ← bao nhiêu tấm song song trên máy
+kho_tt = kho1 × so_dao + 1.8       ← khổ thực tế toàn dải giấy
+dai_tt = (D+R)×2 + 4   (3/5 lớp)
+         (D+R)×2 + 5   (7 lớp)
+DT     = kho_tt × dai_tt / 10.000  ← dùng kho_tt!</pre>
+
+<p><strong>Tại sao dùng kho_tt?</strong> Máy cắt cùng lúc nhiều tấm (so_dao tấm) trên 1 dải giấy rộng. Chi phí giấy tính trên toàn bộ dải đó (kho_tt), bao gồm cả biên giấy giữa các tấm.</p>
+
+<div class="doc-alert doc-tip">
+  <strong>Hao hụt TAM khác thùng thường:</strong> TAM dùng tỷ lệ cố định theo số lớp (3L=4%, 5L=5%, 7L=7%), không tra bảng theo số lượng. Lợi nhuận mặc định cũng cao hơn thùng (7–10% thay vì 6%).
+</div>`
+  },
+
+  {
+    id: 'calc-4',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '5. Hộp Die-cut: Nguyên Lý & 4 Loại Cơ Bản',
+    content: `<p>Hộp die-cut có cấu trúc phức tạp hơn thùng thường và yêu cầu hiểu hình học 3D để nắm công thức. Điểm khác biệt then chốt: <strong>so_dao = 1</strong>, không cắt nhiều mảnh song song.</p>
+
+<h2>Nguyên Lý Die-cut — Khác Gì Slot-type?</h2>
+<table style="width:100%;border-collapse:collapse;margin:10px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Đặc điểm</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Slot-type (A1/A3...)</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Die-cut (Hộp/Khay)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">so_dao</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">≥ 1 (tùy kho1)</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>= 1 (luôn luôn)</strong></td>
+  </tr>
+  <tr style="background:#fafafa;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">kho_tt</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">kho1 × so_dao + 1.8</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>= kho_kh</strong></td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">DT tính giá</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">kho_kh × dai_kh / 10.000</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>kho_kh × dai_kh / 10.000</strong></td>
+  </tr>
+</table>
+
+<h2>4 Loại Hộp Cơ Bản — Bảng Tra Nhanh</h2>
+<table style="width:100%;border-collapse:collapse;margin:10px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Loại</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">kho_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">dai_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Dùng cho</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>HOP_CAI</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + 2R + 5</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4C + D + 10</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp tray thông thường</td>
+  </tr>
+  <tr style="background:#fafafa;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>HOP_CAI_CHAU</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + 2R + 10</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4C + D + 10</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp có vách xiên</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>HOP_GIAY</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + 2R + 10</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + D + 10</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp tự khép đáy</td>
+  </tr>
+  <tr style="background:#fafafa;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>HOP_PIZZA</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4C + 2R + 5</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2C + D + 5</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp nông nắp rộng (pizza, bánh)</td>
+  </tr>
+</table>
+
+<h3>Giải Mã Hệ Số C</h3>
+<ul>
+  <li><strong>3C theo kho_kh:</strong> 3 lần gập chiều Cao theo trục ngang (1 đáy + 2 vách bên).</li>
+  <li><strong>4C theo dai_kh:</strong> 4 lần gập chiều Cao theo trục dọc.</li>
+  <li><strong>HOP_PIZZA đặc biệt:</strong> 4C theo kho (nắp rộng nhiều tầng gập) nhưng chỉ 2C theo dai (hộp rất nông).</li>
+</ul>
+
+<h2>Tề Biên (loai_be) — Cộng Thêm Sau Khi Tính</h2>
+<table style="width:100%;border-collapse:collapse;margin:8px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:7px 12px;">Loại bế</th>
+    <th style="border:1px solid #b0c4de;padding:7px 12px;">Cộng kho_kh</th>
+    <th style="border:1px solid #b0c4de;padding:7px 12px;">Cộng dai_kh</th>
+  </tr>
+  <tr><td style="border:1px solid #d0d0d0;padding:6px 12px;">Bế tay</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+1.0 cm</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+1.0 cm</td></tr>
+  <tr style="background:#fafafa;"><td style="border:1px solid #d0d0d0;padding:6px 12px;">Bế tự động 3 lớp</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+2.0 cm</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+1.5 cm</td></tr>
+  <tr><td style="border:1px solid #d0d0d0;padding:6px 12px;">Bế tự động 5/7 lớp</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+2.0 cm</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+2.0 cm</td></tr>
+</table>
+
+<div class="doc-alert doc-tip">
+  <strong>Ví dụ HOP_CAI — 30×20×10 cm, 3 lớp, bế tay:</strong><br/>
+  kho_kh = 3×10 + 2×20 + 5 = 75 cm → + 1.0 = 76.0 cm<br/>
+  dai_kh = 4×10 + 30 + 10 = 80 cm → + 1.0 = 81.0 cm<br/>
+  DT = 76.0 × 81.0 / 10.000 = 0.616 m²/cái
+</div>`
+  },
+
+  {
+    id: 'calc-5',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '6. Hộp Die-cut Nâng Cao: Nắp Cài & Âm Dương',
+    content: `<p>Nhóm hộp có thiết kế phức tạp nhất, thường dùng cho hàng hóa yêu cầu đóng gói đặc biệt. Các công thức có điểm bẫy cần chú ý kỹ.</p>
+
+<h2>HOP_NAP_CAI_DAY_GAI — Nắp Cài Đáy Gài</h2>
+<p>Nắp và đáy đều có cơ chế cài vào nhau, không dùng băng keo. Phổ biến với hộp quà, hộp thực phẩm cao cấp.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = (D + R) × 2 + 8     ← chu vi thùng + dư biên 8 cm
+dai_kh = C + 2R + 5</pre>
+<p><strong>Điểm nhận biết:</strong> kho_kh phụ thuộc vào <em>chu vi</em> (D+R), không phải D hoặc R đơn lẻ.</p>
+
+<h2>HOP_NAP_CAI_2_DAU — Nắp Cài 2 Đầu</h2>
+<p>Cả 2 đầu hộp đều có cơ chế cài. Thường dùng cho hộp dài có 2 cửa mở (hộp giày, hộp ống).</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = (D + R + 5) × 2     ← 2 nửa mỗi phần D+R+5, ghép lại
+dai_kh = C + 2R + 8</pre>
+
+<h2>HOP_AM_DUONG_THAN & HOP_AM_DUONG_NAP — Hộp Âm Dương Die-cut</h2>
+<p>Hộp quà cao cấp bế khuôn, nắp trùm hoàn toàn lên thân.</p>
+
+<div class="doc-alert doc-warning">
+  <strong>BẪY QUAN TRỌNG — Chiều D và R ĐẢO NGƯỢC so với thùng thường:</strong> Trong hộp âm dương die-cut, D chạy theo trục kho (ngang), R chạy theo trục dai (dọc) — ngược hoàn toàn với A1/A3.
+</div>
+
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">HOP_AM_DUONG_THAN (thân):
+  kho_kh = 4C + D + 5       ← D theo trục kho
+  dai_kh = 2C + R + 5       ← R theo trục dai
+
+HOP_AM_DUONG_NAP (nắp — lớn hơn thân 1 cm mỗi chiều):
+  kho_kh = 4C + D + 6
+  dai_kh = 2C + R + 6</pre>
+
+<h3>Ví Dụ: Hộp 40×30×15, Thân vs Nắp</h3>
+<table style="width:100%;border-collapse:collapse;margin:10px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Phần</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">kho_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">dai_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">DT (m²)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Thân</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4×15+40+5 = 105</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2×15+30+5 = 65</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">0.683</td>
+  </tr>
+  <tr style="background:#fff8f0;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Nắp</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4×15+40+6 = 106</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2×15+30+6 = 66</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">0.700</td>
+  </tr>
+</table>
+
+<h3>Cách Kiểm Tra Không Nhầm D và R</h3>
+<p>Với hộp hình chữ nhật (D &gt; R): kho_kh luôn lớn hơn dai_kh vì 4C+D &gt; 2C+R. Nếu thấy dai_kh &gt; kho_kh khi D &gt; R → nhập ngược D và R rồi.</p>
+
+<div class="doc-alert doc-tip">
+  <strong>Mẹo nhớ 4C và 2C:</strong> Hộp âm dương nhìn từ trên xuống có hình chữ thập: 4 vạt gập theo chiều D (kho) và 2 vạt gập theo chiều R (dai).
+</div>`
+  },
+
+  {
+    id: 'calc-6',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '7. Khay Die-cut: 4 Loại & Hệ Số Đặc Biệt',
+    content: `<p>Khay (tray) thường có thành thấp hơn hộp, không có nắp. Trong hệ thống Nam Phương có 4 loại khay die-cut, mỗi loại có 1–2 điểm đặc biệt cần nắm.</p>
+
+<h2>Bảng Tổng Hợp 4 Loại Khay</h2>
+<table style="width:100%;border-collapse:collapse;margin:10px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Loại</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">kho_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">dai_kh</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Điểm đặc biệt</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>KHAY_1_THANH</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2C + R + 7</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + D + 5</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Cơ bản nhất</td>
+  </tr>
+  <tr style="background:#fafafa;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>KHAY_2_THANH</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + R + 5</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4C + D + 7</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">+1 thành → kho và dai đều tăng C</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>KHAY_1_THANH_CHAU</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>(8/3)C</strong> + R + 9</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + D + 5</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hệ số C = 8/3 ≈ 2.667 (vách xiên)</td>
+  </tr>
+  <tr style="background:#fff8e6;">
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>KHAY_NUOC_GK</strong></td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>D</strong> + 2C + 5</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>R</strong> + 2C + 5</td>
+    <td style="border:1px solid #d0d0d0;padding:7px 12px;">D và R ĐẢO VỊ TRÍ so với khay khác</td>
+  </tr>
+</table>
+
+<h2>Phân Tích Chi Tiết</h2>
+
+<h3>KHAY_1_THANH vs KHAY_2_THANH</h3>
+<p>Thêm 1 thành bên làm cả kho_kh lẫn dai_kh tăng thêm C:</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">KHAY_1_THANH:  kho = 2C+R+7,   dai = 3C+D+5
+KHAY_2_THANH:  kho = 3C+R+5,   dai = 4C+D+7
+                      ↑ +C               ↑ +C</pre>
+<p>Ví dụ D=50, R=30, C=10: KHAY_1 → DT ≈ 0.29 m², KHAY_2 → DT ≈ 0.42 m². Thêm 1 thành tốn thêm ~45% giấy.</p>
+
+<h3>KHAY_1_THANH_CHAU — Tại Sao Hệ Số 8/3?</h3>
+<p>Khay châu có vách bên bị vát xiên (không thẳng 90°). Độ vát làm chiều giấy thực tế dài hơn chiều Cao C. Hệ số chuẩn = 8/3 ≈ 2.667 (so với KHAY_1_THANH dùng hệ số 2).</p>
+
+<h3>KHAY_NUOC_GK — Đảo D và R</h3>
+<pre style="background:#fff8e6;border:1px solid #f0b030;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">KHAY_NUOC_GK:  kho_kh = D + 2C + 5  (D theo trục kho)
+               dai_kh = R + 2C + 5  (R theo trục dai)
+
+Mọi loại khác: kho_kh phụ thuộc R → KHAY_NUOC_GK: kho phụ thuộc D</pre>
+
+<div class="doc-alert doc-warning">
+  <strong>Lỗi thường gặp nhất với Khay:</strong> Nhầm KHAY_1_THANH_CHAU với KHAY_1_THANH khi khách mô tả "khay có vách vát". Hỏi thêm: vách thẳng hay xiên? DT khay vách xiên lớn hơn ~20–30% so với khay vách thẳng cùng kích thước.
+</div>
+
+<div class="doc-alert doc-tip">
+  <strong>Ví dụ nhanh KHAY_1_THANH_CHAU — D=50, R=30, C=8:</strong><br/>
+  kho_kh = (8/3)×8 + 30 + 9 = 21.33 + 30 + 9 = 60.33 cm<br/>
+  dai_kh = 3×8 + 50 + 5 = 79 cm<br/>
+  DT = 60.33 × 79 / 10.000 = 0.476 m²/cái
+</div>`
+  },
+
+  {
+    id: 'calc-7',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '8. Luyện Tập: Ước Lượng Nhanh & Bảng Tóm Tắt',
+    content: `<p>Bài tổng kết — giúp bạn nhìn vào yêu cầu của khách hàng và ước lượng được m², DT, kg giấy mà không cần mở máy tính. Đây là kỹ năng của người làm báo giá lâu năm.</p>
+
+<h2>Quy Tắc Ngón Tay Cái — Ước Lượng DT Nhanh</h2>
+<table style="width:100%;border-collapse:collapse;margin:10px 0;">
+  <tr style="background:#e6f0ff;">
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Loại & Cỡ</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">DT Ước Lượng</th>
+    <th style="border:1px solid #b0c4de;padding:8px 12px;">Ví dụ điển hình</th>
+  </tr>
+  <tr><td style="border:1px solid #d0d0d0;padding:7px 12px;">A1 nhỏ (D+R+C &lt; 80 cm)</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">0.2 – 0.4 m²</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp thực phẩm nhỏ</td></tr>
+  <tr style="background:#fafafa;"><td style="border:1px solid #d0d0d0;padding:7px 12px;">A1 vừa (D+R+C 80–130 cm)</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">0.5 – 0.9 m²</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">Thùng giao hàng thông thường</td></tr>
+  <tr><td style="border:1px solid #d0d0d0;padding:7px 12px;">A1 lớn (D+R+C &gt; 130 cm)</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">1.0 – 1.8 m²</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">Thùng sản phẩm công nghiệp</td></tr>
+  <tr style="background:#fafafa;"><td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp die-cut nhỏ (&lt; 30 cm)</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">0.03 – 0.10 m²</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp thực phẩm, quà tặng</td></tr>
+  <tr><td style="border:1px solid #d0d0d0;padding:7px 12px;">Khay die-cut cạn</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">0.05 – 0.15 m²</td><td style="border:1px solid #d0d0d0;padding:7px 12px;">Khay trưng bày</td></tr>
+</table>
+
+<h2>3 Câu Hỏi Xác Định Loại Trước Khi Tính</h2>
+<ol>
+  <li><strong>Nắp gập liền hay tách rời?</strong><br/>
+    Liền → A1/A3/A7/Gói. Tách rời → A5 hoặc die-cut (hộp/khay).
+  </li>
+  <li><strong>D+R có vượt 134 cm không?</strong><br/>
+    Nếu có → thùng A1/A3/A7 cần 2 mảnh. Báo giá tăng nhẹ, cần xác nhận xưởng.
+  </li>
+  <li><strong>Thành cao hay thấp so với kích thước nền?</strong><br/>
+    Thành thấp (C &lt; R/2) → thường là khay. Thành cao (C ≥ R) → thùng hoặc hộp.
+  </li>
+</ol>
+
+<h2>Tính Ngược: Từ DT → Kg Giấy Cần</h2>
+<p>Khi xưởng cần chuẩn bị nguyên liệu, ước lượng nhanh kg giấy từ DT:</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">Kg giấy mặt  = DT × ĐL_mat / 1000  (kg/cái)
+Kg giấy sóng = DT × take_up_thực × ĐL_song / 1000
+  (take_up thực: E=1.22 | B=1.32 | C=1.45 | A=1.56)
+
+Tổng kg cần = Σ(kg từng lớp) × SL × (1 + hao_hụt%)</pre>
+
+<h2>Ví Dụ Tổng Hợp</h2>
+<p><strong>Đề bài:</strong> Khách đặt 500 cái thùng A1 — 60×40×35 cm, 5 lớp sóng BC. Ước lượng kg giấy cần chuẩn bị.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">Bước 1 — DT:
+  kho_kh = 40 + 35 + 0.4 = 75.4 cm
+  dai_kh = (60+40)×2 + 3 = 203 cm
+  DT = 75.4 × 203 / 10.000 = 1.531 m²/cái
+
+Bước 2 — Kg/cái (ĐL trung bình 150 g/m², sóng C take_up=1.45):
+  Mặt (×3):  1.531 × 150/1000 = 0.230 kg × 3 = 0.690 kg
+  Sóng (×2): 1.531 × 1.45 × 150/1000 = 0.333 kg × 2 = 0.666 kg
+  Tổng ≈ 1.356 kg/cái
+
+Bước 3 — Tổng cần (hao hụt 15%):
+  500 × 1.356 × 1.15 ≈ 779 kg giấy cuộn</pre>
+
+<div class="doc-alert doc-tip">
+  <strong>Kỹ năng thực tế:</strong> Con số ~780 kg giúp bạn hỏi kho ngay: "Còn đủ ~800 kg giấy BC 5 lớp không?" mà không cần chờ hệ thống tính đầy đủ. Rút ngắn thời gian xác nhận đơn hàng xuống còn vài phút.
+</div>
+
+<div class="doc-alert doc-info">
+  <strong>Ôn tập nhanh — Các điểm đặc biệt cần nhớ:</strong><br/>
+  · <strong>TAM</strong>: dùng <code>kho_tt</code> (không phải kho_kh) để tính DT<br/>
+  · <strong>HOP_AM_DUONG</strong>: D chạy theo kho, R chạy theo dai (đảo ngược!)<br/>
+  · <strong>KHAY_NUOC_GK</strong>: D vào kho, R vào dai (đảo so với khay khác)<br/>
+  · <strong>KHAY_1_THANH_CHAU</strong>: hệ số C = 8/3 ≈ 2.667 (không phải 2)<br/>
+  · <strong>A1/A3/A7 lớn</strong>: khi D+R &gt; 133.5 cm → bắt buộc 2 mảnh
+</div>`
+  },
+  {
+    id: 'calc-8',
+    category: '📐 Kỹ Thuật Tính Giá',
+    title: '9. Bảng Tra Cứu: Toàn Bộ 21 Mã Kiểu',
+    content: `<p>Tra cứu nhanh 21 mã — ký hiệu màu: <b style="color:#0369A1">D</b>=Dài · <b style="color:#C2410C">R</b>=Rộng · <b style="color:#16A34A">C</b>=Cao. Ví dụ: D=50, R=30, C=15, 5 lớp.</p>
+
+<h2>Nhóm 1 — Slot-type (9 loại)</h2>
+<p style="font-size:12px;color:#6B7280;margin:4px 0 10px;">so_dao = ⌊180 ÷ kho1⌋ &nbsp;·&nbsp; DT = kho_kh × dai_kh / 10.000 m²</p>
+<div style="overflow-x:auto;">
+<table style="width:100%;border-collapse:collapse;font-size:12px;">
+  <tr style="background:#EFF6FF;">
+    <th style="border:1px solid #BFDBFE;padding:7px 10px;text-align:left;min-width:110px;">Mã kiểu</th>
+    <th style="border:1px solid #BFDBFE;padding:7px 10px;text-align:left;min-width:130px;">Tên</th>
+    <th style="border:1px solid #BFDBFE;padding:7px 10px;text-align:left;">kho_kh</th>
+    <th style="border:1px solid #BFDBFE;padding:7px 10px;text-align:left;">dai_kh</th>
+    <th style="border:1px solid #BFDBFE;padding:7px 10px;text-align:center;min-width:65px;">DT (m²)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">A1</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Thùng thường (RSC)</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;"><b style="color:#C2410C">R</b>+<b style="color:#16A34A">C</b>+off <span style="color:#9CA3AF;font-size:11px">(5L:+0.4)</span></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">(<b style="color:#0369A1">D</b>+<b style="color:#C2410C">R</b>)×2+3</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.740</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">A3</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Nắp chồm (OVS)</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#C2410C">R</b>+<b style="color:#16A34A">C</b></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">(<b style="color:#0369A1">D</b>+<b style="color:#C2410C">R</b>)×2+3</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.223</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">A5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Âm dương (gộp)</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#C2410C">R</b></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.480</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">A5_DAY</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Âm dương đáy</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#C2410C">R</b></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.480</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">A5_NAP</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Âm dương nắp</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#C2410C">R</b>+4</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+4</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.538</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">A7</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Thùng 1 nắp (HSC)</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;"><b style="color:#C2410C">R</b>/2+<b style="color:#16A34A">C</b>+off <span style="color:#9CA3AF;font-size:11px">(5L:+0.2)</span></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">(<b style="color:#0369A1">D</b>+<b style="color:#C2410C">R</b>)×2+3</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.492</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">GOI_GIUA</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Gói giữa (Bliss)</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#C2410C">R</b>+<b style="color:#16A34A">C</b></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">(<b style="color:#0369A1">D</b>+<b style="color:#C2410C">R</b>)×2</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.200</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">GOI_SUON</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Gói sườn (Sleeve)</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#C2410C">R</b>+<b style="color:#16A34A">C</b></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#0369A1">D</b>+3<b style="color:#C2410C">R</b></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.425</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#1D4ED8;font-family:monospace;">TAM ⚠</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Giấy tấm phẳng</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;color:#92400E;font-size:11px;">★ kho_tt=kho1×so_dao+1.8<br/><span style="color:#9CA3AF;">kho1=R+C+3</span></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">(<b style="color:#0369A1">D</b>+<b style="color:#C2410C">R</b>)×2+4</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;font-size:11px;">2.391<br/><span style="color:#9CA3AF;font-size:10px;">so_dao=3</span></td>
+  </tr>
+</table>
+</div>
+
+<h2>Nhóm 2 — Hộp Die-cut (8 loại)</h2>
+<p style="font-size:12px;color:#6B7280;margin:4px 0 10px;">so_dao = 1 luôn luôn &nbsp;·&nbsp; DT = kho_kh × dai_kh / 10.000 m²</p>
+<div style="overflow-x:auto;">
+<table style="width:100%;border-collapse:collapse;font-size:12px;">
+  <tr style="background:#F5F3FF;">
+    <th style="border:1px solid #DDD6FE;padding:7px 10px;text-align:left;min-width:145px;">Mã kiểu</th>
+    <th style="border:1px solid #DDD6FE;padding:7px 10px;text-align:left;min-width:130px;">Tên</th>
+    <th style="border:1px solid #DDD6FE;padding:7px 10px;text-align:left;">kho_kh</th>
+    <th style="border:1px solid #DDD6FE;padding:7px 10px;text-align:left;">dai_kh</th>
+    <th style="border:1px solid #DDD6FE;padding:7px 10px;text-align:center;min-width:65px;">DT (m²)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#6D28D9;font-family:monospace;">HOP_CAI</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Hộp tray</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">3<b style="color:#16A34A">C</b>+2<b style="color:#C2410C">R</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">4<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+10</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.320</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#6D28D9;font-family:monospace;">HOP_CAI_CHAU</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Hộp vách xiên</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">3<b style="color:#16A34A">C</b>+2<b style="color:#C2410C">R</b>+10</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">4<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+10</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.380</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#6D28D9;font-family:monospace;">HOP_GIAY</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Hộp tự khép đáy</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">3<b style="color:#16A34A">C</b>+2<b style="color:#C2410C">R</b>+10</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">3<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+10</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.208</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#6D28D9;font-family:monospace;">HOP_PIZZA</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Hộp pizza/bánh</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">4<b style="color:#16A34A">C</b>+2<b style="color:#C2410C">R</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.063</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#6D28D9;font-family:monospace;font-size:11px;">HOP_NAP_CAI_DAY_GAI</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Nắp cài đáy gài</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">(<b style="color:#0369A1">D</b>+<b style="color:#C2410C">R</b>)×2+8</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;"><b style="color:#16A34A">C</b>+2<b style="color:#C2410C">R</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.344</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#6D28D9;font-family:monospace;font-size:11px;">HOP_NAP_CAI_2_DAU</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Nắp cài 2 đầu</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">(<b style="color:#0369A1">D</b>+<b style="color:#C2410C">R</b>+5)×2</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;"><b style="color:#16A34A">C</b>+2<b style="color:#C2410C">R</b>+8</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">1.411</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#6D28D9;font-family:monospace;font-size:11px;">HOP_AM_DUONG_THAN ⚠</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Âm dương thân</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">4<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+5 <span style="color:#B45309;font-size:10px">[D→kho]</span></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#C2410C">R</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.748</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#6D28D9;font-family:monospace;font-size:11px;">HOP_AM_DUONG_NAP ⚠</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Âm dương nắp</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">4<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+6 <span style="color:#B45309;font-size:10px">[D→kho]</span></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#C2410C">R</b>+6</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.766</td>
+  </tr>
+</table>
+</div>
+
+<h2>Nhóm 3 — Khay Die-cut (4 loại)</h2>
+<p style="font-size:12px;color:#6B7280;margin:4px 0 10px;">Không có nắp &nbsp;·&nbsp; so_dao = 1</p>
+<div style="overflow-x:auto;">
+<table style="width:100%;border-collapse:collapse;font-size:12px;">
+  <tr style="background:#ECFDF5;">
+    <th style="border:1px solid #6EE7B7;padding:7px 10px;text-align:left;min-width:155px;">Mã kiểu</th>
+    <th style="border:1px solid #6EE7B7;padding:7px 10px;text-align:left;min-width:120px;">Tên</th>
+    <th style="border:1px solid #6EE7B7;padding:7px 10px;text-align:left;">kho_kh</th>
+    <th style="border:1px solid #6EE7B7;padding:7px 10px;text-align:left;">dai_kh</th>
+    <th style="border:1px solid #6EE7B7;padding:7px 10px;text-align:center;min-width:65px;">DT (m²)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#047857;font-family:monospace;">KHAY_1_THANH</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Khay 1 thành</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">2<b style="color:#16A34A">C</b>+<b style="color:#C2410C">R</b>+7</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">3<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.670</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#047857;font-family:monospace;">KHAY_2_THANH</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Khay 2 thành</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">3<b style="color:#16A34A">C</b>+<b style="color:#C2410C">R</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">4<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+7</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.936</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#047857;font-family:monospace;font-size:11px;">KHAY_1_THANH_CHAU ⚠</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Khay vách xiên</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;"><span style="color:#B45309;font-weight:700">(8/3)</span><b style="color:#16A34A">C</b>+<b style="color:#C2410C">R</b>+9</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;">3<b style="color:#16A34A">C</b>+<b style="color:#0369A1">D</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.790</td>
+  </tr>
+  <tr style="background:#F9FAFB;">
+    <td style="border:1px solid #ddd;padding:6px 10px;font-weight:700;color:#047857;font-family:monospace;">KHAY_NUOC_GK ⚠</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;">Khay nước GK</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;"><b style="color:#0369A1">D</b>+2<b style="color:#16A34A">C</b>+5 <span style="color:#B45309;font-size:10px">[D→kho]</span></td>
+    <td style="border:1px solid #ddd;padding:6px 10px;font-family:monospace;"><b style="color:#C2410C">R</b>+2<b style="color:#16A34A">C</b>+5</td>
+    <td style="border:1px solid #ddd;padding:6px 10px;text-align:center;font-weight:600;">0.553</td>
+  </tr>
+</table>
+</div>
+
+<div class="doc-alert doc-warning">
+  <strong>4 điểm đặc biệt cần nhớ:</strong><br/>
+  · <strong>TAM</strong>: DT tính theo kho_tt (= kho1×so_dao+1.8) chứ không phải kho_kh — lớn hơn vì bao nhiều tấm đồng thời<br/>
+  · <strong>HOP_AM_DUONG_THAN/NAP</strong>: D chạy theo kho, R chạy theo dai — đảo ngược so với thùng thường<br/>
+  · <strong>KHAY_NUOC_GK</strong>: D vào kho, R vào dai — đảo so với 3 khay còn lại<br/>
+  · <strong>KHAY_1_THANH_CHAU</strong>: hệ số C = 8/3 ≈ 2.667, không phải 2 hay 3
+</div>
+<div class="doc-alert doc-tip">
+  <strong>2 mảnh (A1, A3, A7):</strong> Khi D+R &gt; 133.5 cm → dai_kh &gt; 270 cm → bắt buộc 2 mảnh; mỗi mảnh: dai = (D+R)+3; DT tổng = 2 × kho_kh × dai_kh.
+</div>`
   }
 ];
 
@@ -439,7 +1179,7 @@ export default function DocsPage() {
 
   useEffect(() => {
     // Đổi key để ép tải lại dữ liệu mới nhất
-    const saved = storage.get<DocItem[]>('erp_docs_v7');
+    const saved = storage.get<DocItem[]>('erp_docs_v8');
     if (saved) {
       setDocs(saved);
       if (saved.length > 0) setActiveDoc(saved[0]);
@@ -519,7 +1259,7 @@ export default function DocsPage() {
 
   const saveToLocal = (newDocs: DocItem[]) => {
     setDocs(newDocs);
-    storage.set('erp_docs_v7', newDocs, { ttl: TTL.MONTH });  // cache tài liệu 30 ngày
+    storage.set('erp_docs_v8', newDocs, { ttl: TTL.MONTH });  // cache tài liệu 30 ngày
   };
 
   const handlePreviewClick = (e: React.MouseEvent) => {
