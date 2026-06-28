@@ -135,6 +135,7 @@ class ProductionOutput(Base):
     don_gia_xuat_xuong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     production_session_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_sessions.id"), nullable=True, index=True)
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
+    phieu_in_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phieu_in.id"), nullable=True, index=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -402,6 +403,7 @@ class DeliveryPostTask(Base):
     approved_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     kho_confirmed_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     kho_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -412,6 +414,7 @@ class DeliveryPostTask(Base):
     approved_by = relationship("User", foreign_keys=[approved_by_id])
     kho_confirmed_by = relationship("User", foreign_keys=[kho_confirmed_by_id])
     phap_nhan = relationship("PhapNhan")
+    phan_xuong = relationship("PhanXuong")
 
 
 class OcrSupplierExample(Base):

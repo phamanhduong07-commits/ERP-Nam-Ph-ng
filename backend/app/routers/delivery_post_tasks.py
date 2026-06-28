@@ -14,6 +14,8 @@ from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.warehouse_doc import DeliveryOrder, DeliveryOrderItem, DeliveryPostTask
+from app.models.production import ProductionOrder
+from app.models.master import PhanXuong, PhapNhan
 from app.services.accounting_service import AccountingService
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
@@ -94,6 +96,10 @@ def _task_dict(task: DeliveryPostTask) -> dict:
                       if task.delivery and task.delivery.customer else None),
         "ten_hang": task.item.ten_hang if task.item else None,
         "dvt": task.item.dvt if task.item else None,
+        "phap_nhan_id": task.phap_nhan_id,
+        "ten_phap_nhan": task.phap_nhan.ten_viet_tat if task.phap_nhan else None,
+        "phan_xuong_id": task.phan_xuong_id,
+        "ten_phan_xuong": task.phan_xuong.ten_xuong if task.phan_xuong else None,
     }
 
 
@@ -129,6 +135,13 @@ def create_task(
     if body.tinh_trang == "bu_hao" and body.so_luong_bu_hao <= 0:
         raise HTTPException(400, "Bù hao cần điền số lượng bù hao > 0")
 
+    # Resolve phan_xuong_id từ LSX của dòng hàng
+    phan_xuong_id = None
+    if item.production_order_id:
+        po = db.get(ProductionOrder, item.production_order_id)
+        if po:
+            phan_xuong_id = po.phan_xuong_id
+
     task = DeliveryPostTask(
         delivery_id=body.delivery_id,
         item_id=body.item_id,
@@ -141,6 +154,7 @@ def create_task(
         ghi_chu_sa=body.ghi_chu_sa,
         created_by_id=current_user.id,
         phap_nhan_id=do.phap_nhan_id,
+        phan_xuong_id=phan_xuong_id,
         created_at=datetime.now(timezone.utc),
     )
     db.add(task)
@@ -158,6 +172,8 @@ def create_task(
             selectinload(DeliveryPostTask.kho_confirmed_by),
             selectinload(DeliveryPostTask.delivery).selectinload(DeliveryOrder.customer),
             selectinload(DeliveryPostTask.item),
+            selectinload(DeliveryPostTask.phap_nhan),
+            selectinload(DeliveryPostTask.phan_xuong),
         )
         .filter(DeliveryPostTask.id == task.id)
         .first()
@@ -171,6 +187,8 @@ def create_task(
 def list_tasks(
     trang_thai: Optional[str] = Query(None),
     delivery_id: Optional[int] = Query(None),
+    phap_nhan_id: Optional[int] = Query(None),
+    phan_xuong_id: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -184,12 +202,20 @@ def list_tasks(
             selectinload(DeliveryPostTask.kho_confirmed_by),
             selectinload(DeliveryPostTask.delivery).selectinload(DeliveryOrder.customer),
             selectinload(DeliveryPostTask.item),
+            selectinload(DeliveryPostTask.phap_nhan),
+            selectinload(DeliveryPostTask.phan_xuong),
+            selectinload(DeliveryPostTask.phap_nhan),
+            selectinload(DeliveryPostTask.phan_xuong),
         )
     )
     if trang_thai:
         q = q.filter(DeliveryPostTask.trang_thai == trang_thai)
     if delivery_id:
         q = q.filter(DeliveryPostTask.delivery_id == delivery_id)
+    if phap_nhan_id is not None:
+        q = q.filter(DeliveryPostTask.phap_nhan_id == phap_nhan_id)
+    if phan_xuong_id is not None:
+        q = q.filter(DeliveryPostTask.phan_xuong_id == phan_xuong_id)
 
     total = q.count()
     items = q.order_by(DeliveryPostTask.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -212,6 +238,8 @@ def get_task(
             selectinload(DeliveryPostTask.kho_confirmed_by),
             selectinload(DeliveryPostTask.delivery).selectinload(DeliveryOrder.customer),
             selectinload(DeliveryPostTask.item),
+            selectinload(DeliveryPostTask.phap_nhan),
+            selectinload(DeliveryPostTask.phan_xuong),
         )
         .filter(DeliveryPostTask.id == task_id)
         .first()
@@ -235,6 +263,8 @@ def duyet_task(
         .options(
             selectinload(DeliveryPostTask.delivery).selectinload(DeliveryOrder.customer),
             selectinload(DeliveryPostTask.item),
+            selectinload(DeliveryPostTask.phap_nhan),
+            selectinload(DeliveryPostTask.phan_xuong),
             selectinload(DeliveryPostTask.created_by),
             selectinload(DeliveryPostTask.approved_by),
             selectinload(DeliveryPostTask.kho_confirmed_by),
@@ -454,6 +484,8 @@ def kho_nhan_task(
         .options(
             selectinload(DeliveryPostTask.delivery).selectinload(DeliveryOrder.customer),
             selectinload(DeliveryPostTask.item),
+            selectinload(DeliveryPostTask.phap_nhan),
+            selectinload(DeliveryPostTask.phan_xuong),
             selectinload(DeliveryPostTask.created_by),
             selectinload(DeliveryPostTask.approved_by),
             selectinload(DeliveryPostTask.kho_confirmed_by),

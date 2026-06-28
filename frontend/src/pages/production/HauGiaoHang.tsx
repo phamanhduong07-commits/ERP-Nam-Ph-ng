@@ -33,6 +33,9 @@ import {
   type DeliveryPostTask,
 } from '../../api/delivery-post-tasks'
 import { warehousesApi, type Warehouse } from '../../api/warehouses'
+import client from '../../api/client'
+import type { PhanXuong } from '../../api/warehouse'
+import { warehouseApi } from '../../api/warehouse'
 
 const { Text } = Typography
 
@@ -103,6 +106,18 @@ function baseColumns(): ColumnsType<DeliveryPostTask> {
           )}
         </span>
       ),
+    },
+    {
+      title: 'Pháp nhân',
+      dataIndex: 'ten_phap_nhan',
+      width: 90,
+      render: v => v ? <Tag color="blue" style={{ fontSize: 11 }}>{v}</Tag> : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Xưởng SX',
+      dataIndex: 'ten_phan_xuong',
+      width: 100,
+      render: v => v ? <Tag style={{ fontSize: 11 }}>{(v as string).replace(/^Xưởng\s+/i, '')}</Tag> : <Text type="secondary">—</Text>,
     },
     {
       title: 'Yêu cầu bởi',
@@ -374,9 +389,23 @@ function ChoKhoTab() {
 // ── LichSuTab ─────────────────────────────────────────────────────────────────
 
 function LichSuTab() {
+  const [filterPhapNhanId, setFilterPhapNhanId] = useState<number | undefined>()
+  const [filterPhanXuongId, setFilterPhanXuongId] = useState<number | undefined>()
+
+  const { data: phapNhanList = [] } = useQuery<{ id: number; ten_viet_tat: string }[]>({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => client.get<{ id: number; ten_viet_tat: string }[]>('/phap-nhan').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+
   const { data, isLoading } = useQuery({
-    queryKey: ['delivery-post-tasks', 'lich_su'],
-    queryFn: () => listTasks({ page_size: 200 }),
+    queryKey: ['delivery-post-tasks', 'lich_su', filterPhapNhanId, filterPhanXuongId],
+    queryFn: () => listTasks({ page_size: 200, phap_nhan_id: filterPhapNhanId, phan_xuong_id: filterPhanXuongId }),
   })
 
   const columns: ColumnsType<DeliveryPostTask> = [
@@ -411,15 +440,29 @@ function LichSuTab() {
   ]
 
   return (
-    <Table
-      loading={isLoading}
-      dataSource={data?.items || []}
-      columns={columns}
-      rowKey="id"
-      size="small"
-      scroll={{ x: 1400 }}
-      pagination={{ pageSize: 50 }}
-    />
+    <>
+      <Space style={{ marginBottom: 12 }}>
+        <Select
+          size="small" style={{ width: 140 }} placeholder="Pháp nhân" allowClear
+          value={filterPhapNhanId} onChange={v => setFilterPhapNhanId(v)}
+          options={phapNhanList.map(p => ({ value: p.id, label: p.ten_viet_tat }))}
+        />
+        <Select
+          size="small" style={{ width: 160 }} placeholder="Xưởng SX" allowClear
+          value={filterPhanXuongId} onChange={v => setFilterPhanXuongId(v)}
+          options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong.replace(/^Xưởng\s+/i, '') }))}
+        />
+      </Space>
+      <Table
+        loading={isLoading}
+        dataSource={data?.items || []}
+        columns={columns}
+        rowKey="id"
+        size="small"
+        scroll={{ x: 1600 }}
+        pagination={{ pageSize: 50 }}
+      />
+    </>
   )
 }
 

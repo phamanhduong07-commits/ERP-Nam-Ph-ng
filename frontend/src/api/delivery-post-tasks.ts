@@ -24,6 +24,10 @@ export interface DeliveryPostTask {
   ten_khach?: string | null
   ten_hang?: string | null
   dvt?: string | null
+  phap_nhan_id?: number | null
+  ten_phap_nhan?: string | null
+  phan_xuong_id?: number | null
+  ten_phan_xuong?: string | null
 }
 
 export interface ListTasksResponse {
@@ -77,24 +81,26 @@ export const TRANG_THAI_LABELS: Record<string, string> = {
 }
 
 export const createTask = (payload: CreateTaskPayload): Promise<DeliveryPostTask> =>
-  client.post('/api/delivery-post-tasks', payload).then(r => r.data)
+  client.post('/delivery-post-tasks', payload).then(r => r.data)
 
 export const listTasks = (params?: {
   trang_thai?: string
   delivery_id?: number
+  phap_nhan_id?: number
+  phan_xuong_id?: number
   page?: number
   page_size?: number
 }): Promise<ListTasksResponse> =>
-  client.get('/api/delivery-post-tasks', { params }).then(r => r.data)
+  client.get('/delivery-post-tasks', { params }).then(r => r.data)
 
 export const getTask = (id: number): Promise<DeliveryPostTask> =>
-  client.get(`/api/delivery-post-tasks/${id}`).then(r => r.data)
+  client.get(`/delivery-post-tasks/${id}`).then(r => r.data)
 
 export const approveTask = (id: number, payload: ApprovePayload): Promise<DeliveryPostTask> =>
-  client.put(`/api/delivery-post-tasks/${id}/duyet`, payload).then(r => r.data)
+  client.put(`/delivery-post-tasks/${id}/duyet`, payload).then(r => r.data)
 
 export const rejectTask = (id: number, payload: ApprovePayload): Promise<unknown> =>
-  client.put(`/api/delivery-post-tasks/${id}/tu-choi`, payload).then(r => r.data)
+  client.put(`/delivery-post-tasks/${id}/tu-choi`, payload).then(r => r.data)
 
 export const khoNhanTask = (id: number, payload: KhoNhanPayload): Promise<DeliveryPostTask> =>
-  client.put(`/api/delivery-post-tasks/${id}/kho-nhan`, payload).then(r => r.data)
+  client.put(`/delivery-post-tasks/${id}/kho-nhan`, payload).then(r => r.data)
