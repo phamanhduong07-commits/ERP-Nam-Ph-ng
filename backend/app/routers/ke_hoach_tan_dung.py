@@ -47,7 +47,9 @@ class TanDungItemOut(BaseModel):
     ghi_chu: str | None
     tong_nhap_phoi: int = 0   # số tấm phôi đã nhập (PhieuNhapPhoiSong)
     ton_kho_tp: float = 0.0   # số lượng TP đã nhập kho (ProductionOutput)
-    ton_kho_td: float = 0.0   # tấm phôi khả dụng trong kho TAN_DUNG khớp kích thước
+    ton_kho_td: float = 0.0      # tấm phôi khớp trực tiếp (cat dimension)
+    ton_kho_td_xe: float = 0.0   # tấm từ xẻ full-width (count × so_lan_cat)
+    kho_td_wh_id: int | None = None  # warehouse_id TAN_DUNG của xưởng
 
     class Config:
         from_attributes = True
@@ -164,13 +166,15 @@ def list_tan_dung(
         )
         tp_map = {r.production_order_id: float(r.tong_nhap) for r in tp_agg}
 
-    # TAN_DUNG inventory per (phan_xuong_id, ten_hang) for dimension matching
+    # TAN_DUNG inventory per (phan_xuong_id, ten_hang) — includes warehouse_id for quick-use
     phan_xuong_ids = list({o.phan_xuong_id for o in orders if o.phan_xuong_id})
     td_map: dict[tuple[int, str], float] = {}
+    td_wh_map: dict[int, int] = {}  # phan_xuong_id → warehouse_id
     if phan_xuong_ids:
-        td_agg = (
+        all_td = (
             db.query(
                 Warehouse.phan_xuong_id,
+                Warehouse.id.label("wh_id"),
                 InventoryBalance.ten_hang,
                 func.coalesce(func.sum(InventoryBalance.ton_luong), 0).label("total"),
             )
@@ -178,10 +182,13 @@ def list_tan_dung(
             .filter(Warehouse.loai_kho == "TAN_DUNG")
             .filter(Warehouse.phan_xuong_id.in_(phan_xuong_ids))
             .filter(InventoryBalance.ten_hang.isnot(None))
-            .group_by(Warehouse.phan_xuong_id, InventoryBalance.ten_hang)
+            .filter(InventoryBalance.ton_luong > 0)
+            .group_by(Warehouse.phan_xuong_id, Warehouse.id, InventoryBalance.ten_hang)
             .all()
         )
-        td_map = {(r.phan_xuong_id, r.ten_hang): float(r.total) for r in td_agg}
+        for r in all_td:
+            td_map[(r.phan_xuong_id, r.ten_hang)] = float(r.total)
+            td_wh_map.setdefault(r.phan_xuong_id, r.wh_id)
 
     result: list[TanDungItemOut] = []
     for order in orders:
@@ -202,7 +209,17 @@ def list_tan_dung(
             # Normalize cat "600 × 400" → "600x400" to match InventoryBalance.ten_hang
             cat_str = _cat(item)
             cat_key = cat_str.replace(" × ", "x") if cat_str else None
-            ton_kho_td = td_map.get((order.phan_xuong_id, cat_key), 0.0) if (cat_key and order.phan_xuong_id) else 0.0
+            px_id = order.phan_xuong_id
+            ton_kho_td = td_map.get((px_id, cat_key), 0.0) if (cat_key and px_id) else 0.0
+
+            # xẻ từ full-width: chỉ khi so_lan_cat > 1 (tránh double-count với direct match)
+            so_lan = item.so_lan_cat or 1
+            if so_lan > 1 and item.kho_tt and item.dai_tt and px_id:
+                full_key = f"{int(float(item.kho_tt))}x{int(float(item.dai_tt))}"
+                ton_kho_td_xe = td_map.get((px_id, full_key), 0.0) * so_lan
+            else:
+                ton_kho_td_xe = 0.0
+            kho_td_wh_id = td_wh_map.get(px_id) if px_id else None
 
             result.append(TanDungItemOut(
                 production_order_id=order.id,
@@ -233,6 +250,8 @@ def list_tan_dung(
                 tong_nhap_phoi=nhap_phoi_map.get(order.id, 0),
                 ton_kho_tp=tp_map.get(order.id, 0.0),
                 ton_kho_td=ton_kho_td,
+                ton_kho_td_xe=ton_kho_td_xe,
+                kho_td_wh_id=kho_td_wh_id,
             ))
 
     # Sắp xếp theo ngày giao hàng

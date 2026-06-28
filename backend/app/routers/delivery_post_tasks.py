@@ -17,6 +17,7 @@ from app.models.warehouse_doc import DeliveryOrder, DeliveryOrderItem, DeliveryP
 from app.models.production import ProductionOrder
 from app.models.master import PhanXuong, PhapNhan
 from app.services.accounting_service import AccountingService
+from app.services.billing_service import BillingService
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
     nhap_balance as _nhap_balance,
@@ -292,8 +293,80 @@ def duyet_task(
         db.refresh(task)
         return _task_dict(task)
 
-    # ── giao_bu_sau / khach_giu_mien_phi: ghi note only ──────────────────────
-    if task.huong_xu_ly in ("giao_bu_sau", "khach_giu_mien_phi"):
+    # ── giao_bu_sau: nhập lại số thiếu vào kho + sync invoice ──────────────────
+    if task.huong_xu_ly == "giao_bu_sau":
+        delta = task.so_luong_cu - task.so_luong_moi
+        if delta <= 0:
+            raise HTTPException(status_code=400, detail="so_luong_moi phải nhỏ hơn so_luong_cu khi giao thiếu")
+        if do.warehouse_id:
+            bal = _get_or_create_balance(
+                db, do.warehouse_id,
+                product_id=it.product_id,
+                ten_hang=it.ten_hang or "", don_vi=it.dvt or "Thùng",
+                lock=True,
+            )
+            _nhap_balance(bal, delta, it.don_gia or Decimal("0"))
+            _log_tx(
+                db, do.warehouse_id, "NHAP_GIAO_THIEU",
+                delta, it.don_gia or Decimal("0"), bal.ton_luong,
+                "delivery_post_tasks", task.id, current_user.id,
+                product_id=it.product_id,
+                ghi_chu=f"Hậu giao {do.so_phieu}: giao thiếu, nhập lại {it.ten_hang}",
+            )
+        _ratio = Decimal(str(task.so_luong_moi)) / Decimal(str(task.so_luong_cu))
+        it.so_luong = task.so_luong_moi
+        it.thanh_tien = task.so_luong_moi * (it.don_gia or Decimal("0"))
+        if it.dien_tich is not None:
+            it.dien_tich = round(it.dien_tich * _ratio, 4)
+        if it.trong_luong is not None:
+            it.trong_luong = round(it.trong_luong * _ratio, 3)
+        if it.the_tich is not None:
+            it.the_tich = round(it.the_tich * _ratio, 4)
+        it.tinh_trang_dieu_chinh = task.tinh_trang
+        it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
+        do.tong_tien_hang = sum((i.thanh_tien or Decimal("0")) for i in do.items)
+        do.tong_thanh_toan = (do.tong_tien_hang or Decimal("0")) + (do.tien_van_chuyen or Decimal("0"))
+        db.flush()
+        BillingService(db).sync_invoice_to_delivery(
+            do.id, ghi_chu=f"Hậu giao {do.so_phieu}: giao thiếu {it.ten_hang}"
+        )
+
+    # ── khach_giu_mien_phi: xuất thêm kho dư + JE 641/155 ───────────────────
+    elif task.huong_xu_ly == "khach_giu_mien_phi":
+        delta = task.so_luong_moi - task.so_luong_cu
+        if delta > 0 and do.warehouse_id:
+            bal = _get_or_create_balance(
+                db, do.warehouse_id,
+                product_id=it.product_id,
+                ten_hang=it.ten_hang or "", don_vi=it.dvt or "Thùng",
+                lock=True,
+            )
+            gia_von = bal.don_gia_binh_quan * delta
+            _xuat_balance(bal, delta, it.ten_hang or "")
+            _log_tx(
+                db, do.warehouse_id, "XUAT_TANG_DU_MIEN_PHI",
+                delta, bal.don_gia_binh_quan, bal.ton_luong,
+                "delivery_post_tasks", task.id, current_user.id,
+                product_id=it.product_id,
+                ghi_chu=f"Hậu giao {do.so_phieu}: giao dư miễn phí {it.ten_hang}",
+            )
+            if gia_von > 0:
+                acct = AccountingService(db)
+                acct._create_journal_entry(
+                    ngay=date.today(),
+                    dien_giai=f"Giao dư miễn phí {float(delta):g} {it.dvt or ''} {it.ten_hang} - Phiếu {do.so_phieu}",
+                    loai_but_toan="xuat_tang_du_mien_phi",
+                    chung_tu_loai="delivery_post_tasks",
+                    chung_tu_id=task.id,
+                    lines=[
+                        {"so_tk": "641", "so_tien_no": gia_von, "so_tien_co": Decimal("0"),
+                         "dien_giai": f"CP hàng tặng dư: {it.ten_hang} x{float(delta):g}"},
+                        {"so_tk": "155", "so_tien_no": Decimal("0"), "so_tien_co": gia_von,
+                         "dien_giai": f"Xuất TP tặng dư: {it.ten_hang} x{float(delta):g}"},
+                    ],
+                    phap_nhan_id=do.phap_nhan_id,
+                    user_id=current_user.id,
+                )
         it.tinh_trang_dieu_chinh = task.tinh_trang
         it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
 
@@ -316,13 +389,24 @@ def duyet_task(
                 product_id=it.product_id,
                 ghi_chu=f"Hậu giao {do.so_phieu}: giảm {it.ten_hang}",
             )
+        _ratio = Decimal(str(task.so_luong_moi)) / Decimal(str(task.so_luong_cu))
         it.so_luong = task.so_luong_moi
         it.thanh_tien = task.so_luong_moi * (it.don_gia or Decimal("0"))
+        if it.dien_tich is not None:
+            it.dien_tich = round(it.dien_tich * _ratio, 4)
+        if it.trong_luong is not None:
+            it.trong_luong = round(it.trong_luong * _ratio, 3)
+        if it.the_tich is not None:
+            it.the_tich = round(it.the_tich * _ratio, 4)
         it.tinh_trang_dieu_chinh = task.tinh_trang
         it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
         # Cập nhật tổng phiếu
         do.tong_tien_hang = sum((i.thanh_tien or Decimal("0")) for i in do.items)
         do.tong_thanh_toan = (do.tong_tien_hang or Decimal("0")) + (do.tien_van_chuyen or Decimal("0"))
+        db.flush()
+        BillingService(db).sync_invoice_to_delivery(
+            do.id, ghi_chu=f"Hậu giao {do.so_phieu}: giảm đơn {it.ten_hang}"
+        )
 
     # ── tinh_tien_them: tăng so_luong + xuất thêm inventory ─────────────────
     elif task.huong_xu_ly == "tinh_tien_them":
@@ -356,6 +440,10 @@ def duyet_task(
         it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
         do.tong_tien_hang = sum((i.thanh_tien or Decimal("0")) for i in do.items)
         do.tong_thanh_toan = (do.tong_tien_hang or Decimal("0")) + (do.tien_van_chuyen or Decimal("0"))
+        db.flush()
+        BillingService(db).sync_invoice_to_delivery(
+            do.id, ghi_chu=f"Hậu giao {do.so_phieu}: tính thêm tiền {it.ten_hang}"
+        )
 
     # ── xuat_bu_hao: xuất kho thêm + dòng 0đ + JournalEntry ─────────────────
     elif task.huong_xu_ly == "xuat_bu_hao":
@@ -522,13 +610,24 @@ def kho_nhan_task(
     )
 
     # Cập nhật số lượng item + metadata
+    _ratio = Decimal(str(task.so_luong_moi)) / Decimal(str(task.so_luong_cu))
     it.so_luong = task.so_luong_moi
     it.thanh_tien = task.so_luong_moi * (it.don_gia or Decimal("0"))
+    if it.dien_tich is not None:
+        it.dien_tich = round(it.dien_tich * _ratio, 4)
+    if it.trong_luong is not None:
+        it.trong_luong = round(it.trong_luong * _ratio, 3)
+    if it.the_tich is not None:
+        it.the_tich = round(it.the_tich * _ratio, 4)
     it.tinh_trang_dieu_chinh = task.tinh_trang
     it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
 
     do.tong_tien_hang = sum((i.thanh_tien or Decimal("0")) for i in do.items)
     do.tong_thanh_toan = (do.tong_tien_hang or Decimal("0")) + (do.tien_van_chuyen or Decimal("0"))
+    db.flush()
+    BillingService(db).sync_invoice_to_delivery(
+        do.id, ghi_chu=f"Hậu giao {do.so_phieu}: hàng về kho ({task.huong_xu_ly})"
+    )
 
     task.trang_thai = "hoan_thanh"
     task.kho_confirmed_by_id = current_user.id

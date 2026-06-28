@@ -51,6 +51,8 @@ interface TanDungItem {
   tong_nhap_phoi: number
   ton_kho_tp: number
   ton_kho_td: number
+  ton_kho_td_xe: number
+  kho_td_wh_id: number | null
 }
 
 interface PhanXuong {
@@ -94,7 +96,7 @@ export default function TanDungPlanPage() {
   const [soPallet, setSoPallet] = useState(1)
 
   // ── Nhập phôi sóng ───────────────────────────────────────────────────────────
-  const [phoiOrder, setPhoiOrder] = useState<ProductionOrder | null>(null)
+  const [phoiState, setPhoiState] = useState<{ order: ProductionOrder; defaultWh?: number } | null>(null)
   const [phoiLoading, setPhoiLoading] = useState(false)
 
   // ── Nhập thành phẩm ──────────────────────────────────────────────────────────
@@ -176,7 +178,19 @@ export default function TanDungPlanPage() {
     setPhoiLoading(true)
     try {
       const { data } = await productionOrdersApi.get(r.production_order_id)
-      setPhoiOrder(data)
+      setPhoiState({ order: data })
+    } catch {
+      message.error('Không tải được lệnh SX')
+    } finally {
+      setPhoiLoading(false)
+    }
+  }
+
+  const handleNhapPhoiTD = async (r: TanDungItem) => {
+    setPhoiLoading(true)
+    try {
+      const { data } = await productionOrdersApi.get(r.production_order_id)
+      setPhoiState({ order: data, defaultWh: r.kho_td_wh_id ?? undefined })
     } catch {
       message.error('Không tải được lệnh SX')
     } finally {
@@ -247,22 +261,31 @@ export default function TanDungPlanPage() {
       render: (v: number | null) => v != null ? Number(v).toLocaleString('vi-VN') : '' },
     {
       title: 'Kho TD',
-      dataIndex: 'ton_kho_td',
-      key: 'ton_kho_td',
-      width: 75,
+      key: 'kho_td',
+      width: 90,
       align: 'right' as const,
-      render: (v: number, r: TanDungItem) => {
-        if (!v || v <= 0) return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
+      render: (_: unknown, r: TanDungItem) => {
+        const direct = r.ton_kho_td || 0
+        const xe = r.ton_kho_td_xe || 0
+        const total = direct + xe
+        if (total <= 0) return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
         const needed = r.so_luong_tam ?? 0
-        const enough = needed > 0 && v >= needed
+        const enough = needed > 0 && total >= needed
+        const color = enough ? '#389e0d' : '#fa8c16'
+        const tip = (
+          <div style={{ fontSize: 12 }}>
+            {needed > 0 && <div>Cần: <b>{needed.toLocaleString('vi-VN')}</b> tấm</div>}
+            {direct > 0 && <div>✓ Khớp ({r.cat}): {direct.toLocaleString('vi-VN')}</div>}
+            {xe > 0 && <div>✂ Xẻ full-width: {xe.toLocaleString('vi-VN')}</div>}
+          </div>
+        )
         return (
-          <Tooltip title={needed > 0
-            ? `Cần ${needed.toLocaleString('vi-VN')} tấm — Kho TD có ${v.toLocaleString('vi-VN')}`
-            : `Kho TD: ${v.toLocaleString('vi-VN')} tấm`}
-          >
-            <Text strong style={{ color: enough ? '#389e0d' : '#fa8c16', fontSize: 12 }}>
-              {v.toLocaleString('vi-VN')}
-            </Text>
+          <Tooltip title={tip}>
+            <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
+              <Text strong style={{ color, fontSize: 12 }}>{total.toLocaleString('vi-VN')}</Text>
+              {xe > 0 && direct === 0 && <Text style={{ fontSize: 10, color: '#fa8c16' }}>✂xẻ</Text>}
+              {xe > 0 && direct > 0 && <Text style={{ fontSize: 10, color }}>{direct.toLocaleString('vi-VN')}+{xe.toLocaleString('vi-VN')}✂</Text>}
+            </Space>
           </Tooltip>
         )
       },
@@ -298,6 +321,13 @@ export default function TanDungPlanPage() {
               loading={phoiLoading}
               onClick={(e) => { e.stopPropagation(); handleNhapPhoi(r) }} />
           </Tooltip>
+          {((r.ton_kho_td || 0) + (r.ton_kho_td_xe || 0) > 0) && r.kho_td_wh_id && (
+            <Tooltip title={`Nhập từ kho TAN_DUNG (${((r.ton_kho_td || 0) + (r.ton_kho_td_xe || 0)).toLocaleString('vi-VN')} tấm)`}>
+              <Button size="small" loading={phoiLoading}
+                style={{ background: '#13c2c2', borderColor: '#13c2c2', color: '#fff', fontSize: 11, padding: '0 6px' }}
+                onClick={(e) => { e.stopPropagation(); handleNhapPhoiTD(r) }}>TD</Button>
+            </Tooltip>
+          )}
           <Tooltip title="Nhập kho thành phẩm">
             <Button size="small" icon={<CheckSquareOutlined />}
               style={{ color: '#52c41a', borderColor: '#52c41a' }}
@@ -503,13 +533,14 @@ export default function TanDungPlanPage() {
       </Modal>
 
       {/* ── Nhập phôi sóng — dùng lại modal hiện có ─────────────────────────── */}
-      {phoiOrder && (
+      {phoiState && (
         <PhieuNhapPhoiSongModal
-          open={phoiOrder !== null}
-          order={phoiOrder}
-          onClose={() => setPhoiOrder(null)}
+          open
+          order={phoiState.order}
+          defaultWarehouseId={phoiState.defaultWh}
+          onClose={() => setPhoiState(null)}
           onSuccess={() => {
-            setPhoiOrder(null)
+            setPhoiState(null)
             qc.invalidateQueries({ queryKey: ['tan-dung-plan'] })
           }}
         />

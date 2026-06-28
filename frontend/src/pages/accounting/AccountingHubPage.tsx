@@ -10,9 +10,9 @@ const GROUPS: HubGroup[] = [
       { icon: '📒', label: 'Sổ quỹ tiền mặt', to: '/accounting/cash-book' },
       { icon: '🏦', label: 'Sổ tiền gửi NH', to: '/accounting/bank-ledger' },
       { icon: '🔄', label: 'Đối soát ngân hàng', to: '/accounting/bank-reconciliation' },
-      { icon: '📋', label: 'Khế ước đi vay',     to: '/accounting/khe-uoc-vay' },
-      { icon: '💼', label: 'Khế ước cho vay',    to: '/accounting/khe-uoc-cho-vay' },
-      { icon: '📈', label: 'Dự báo dòng tiền',   to: '/accounting/du-bao-dong-tien' },
+      { icon: '📋', label: 'Khế ước đi vay',     to: '/accounting/khe-uoc-vay',       permissions: ['accounting.manage'] },
+      { icon: '💼', label: 'Khế ước cho vay',    to: '/accounting/khe-uoc-cho-vay',   permissions: ['accounting.manage'] },
+      { icon: '📈', label: 'Dự báo dòng tiền',   to: '/accounting/du-bao-dong-tien',  permissions: ['accounting.manage'] },
     ],
   },
   {
@@ -46,8 +46,8 @@ const GROUPS: HubGroup[] = [
   {
     title: 'Báo cáo tài chính',
     items: [
-      { icon: '📊', label: 'Báo cáo lãi/lỗ', to: '/accounting/profit-loss' },
-      { icon: '🏛️', label: 'Bảng cân đối kế toán', to: '/accounting/balance-sheet' },
+      { icon: '📊', label: 'Báo cáo lãi/lỗ', to: '/accounting/profit-loss', permissions: ['accounting.manage'] },
+      { icon: '🏛️', label: 'Bảng cân đối kế toán', to: '/accounting/balance-sheet', permissions: ['accounting.manage'] },
     ],
   },
   {

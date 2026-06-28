@@ -62,7 +62,7 @@ export interface PhieuTraHangListParams {
   den_ngay?: string
 }
 
-const BASE = '/api/phieu-tra-hang'
+const BASE = '/phieu-tra-hang'
 
 export const phieuTraHangApi = {
   list: (params?: PhieuTraHangListParams) =>

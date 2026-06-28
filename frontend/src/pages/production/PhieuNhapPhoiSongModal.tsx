@@ -110,6 +110,7 @@ interface Props {
   order: ProductionOrder
   onClose: () => void
   onSuccess: () => void
+  defaultWarehouseId?: number
 }
 
 function getStoredSession(orderId: number): { ngay: string; gio_bat_dau: string } | null {
@@ -120,14 +121,14 @@ function getStoredSession(orderId: number): { ngay: string; gio_bat_dau: string 
   return null
 }
 
-export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess }: Props) {
+export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess, defaultWarehouseId }: Props) {
   const session   = getStoredSession(order.id)
   const tamDung   = getSavedTamDung(order.id)
 
   const [ngay, setNgay] = useState(session?.ngay ?? dayjs().format('YYYY-MM-DD'))
   const [ca, setCa] = useState<string | null>(tamDung?.ca ?? null)
   const [ghiChu, setGhiChu] = useState(tamDung?.ghi_chu ?? '')
-  const [warehouseId, setWarehouseId] = useState<number | null>(tamDung?.warehouse_id ?? null)
+  const [warehouseId, setWarehouseId] = useState<number | null>(defaultWarehouseId ?? tamDung?.warehouse_id ?? null)
   const [gioBatDau, setGioBatDau] = useState<dayjs.Dayjs | null>(
     session?.gio_bat_dau ? dayjs(session.gio_bat_dau, 'HH:mm') : dayjs()
   )
@@ -171,7 +172,8 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
   })()
 
   const khoPhoi = (warehouses ?? []).filter(
-    w => w.loai_kho === 'PHOI' && w.trang_thai &&
+    w => (w.loai_kho === 'PHOI' || (order.tan_dung && w.loai_kho === 'TAN_DUNG')) &&
+      w.trang_thai &&
       (phoiSourcePxId ? w.phan_xuong_id === phoiSourcePxId : true)
   )
 

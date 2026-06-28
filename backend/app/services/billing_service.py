@@ -568,6 +568,52 @@ class BillingService:
         return log
 
     # ─────────────────────────────────────────
+    # Đồng bộ SalesInvoice sau Hậu Giao Hàng
+    # ─────────────────────────────────────────
+    def sync_invoice_to_delivery(self, delivery_id: int, ghi_chu: str = "") -> None:
+        """Gọi sau khi DO.tong_tien_hang thay đổi do HauGiaoHang. Đồng bộ tất cả SalesInvoice chưa hủy."""
+        do = self.db.get(DeliveryOrder, delivery_id)
+        if not do:
+            return
+        new_tong_tien = do.tong_tien_hang or Decimal("0")
+        invs = (
+            self.db.query(SalesInvoice)
+            .filter(SalesInvoice.delivery_id == delivery_id, SalesInvoice.trang_thai != "huy")
+            .all()
+        )
+        for inv in invs:
+            if inv.tong_tien_hang == new_tong_tien:
+                continue
+            tien_vat_moi = round(new_tong_tien * inv.ty_le_vat / 100, 0)
+            tong_cong_moi = new_tong_tien + tien_vat_moi
+            if inv.trang_thai == "nhap":
+                inv.tong_tien_hang = new_tong_tien
+                inv.tien_vat = tien_vat_moi
+                inv.tong_cong = tong_cong_moi
+            else:
+                old_tong_cong = inv.tong_cong
+                self.db.add(DebtLedgerEntry(
+                    ngay=date.today(), loai="giam_no", doi_tuong="khach_hang",
+                    customer_id=inv.customer_id, chung_tu_loai="dieu_chinh_hau_giao_hang",
+                    chung_tu_id=inv.id, so_tien=old_tong_cong,
+                    ghi_chu=f"Đảo nợ HĐ {inv.so_hoa_don} — {ghi_chu}",
+                    phap_nhan_id=inv.phap_nhan_id,
+                ))
+                self._reverse_sales_invoice_journal(inv)
+                inv.tong_tien_hang = new_tong_tien
+                inv.tien_vat = tien_vat_moi
+                inv.tong_cong = tong_cong_moi
+                self.db.add(DebtLedgerEntry(
+                    ngay=date.today(), loai="tang_no", doi_tuong="khach_hang",
+                    customer_id=inv.customer_id, chung_tu_loai="dieu_chinh_hau_giao_hang",
+                    chung_tu_id=inv.id, so_tien=tong_cong_moi,
+                    ghi_chu=f"Điều chỉnh HĐ {inv.so_hoa_don} — {ghi_chu}",
+                    phap_nhan_id=inv.phap_nhan_id,
+                ))
+                self._post_sales_invoice_journal(inv)
+            inv.updated_at = datetime.now(timezone.utc)
+
+    # ─────────────────────────────────────────
     # Phát hành (kết chuyển)
     # ─────────────────────────────────────────
     def issue_invoice(self, invoice_id: int) -> SalesInvoice:

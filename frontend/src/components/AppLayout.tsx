@@ -64,11 +64,11 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
                 </Link>
               ),
             },
-            { key: '/sales/orders', to: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
-            { key: '/sales/returns', to: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link> },
-            { key: '/sales/theo-don-hang', to: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link> },
-            { key: '/sales/giao-hang', to: '/sales/giao-hang', label: <Link to="/sales/giao-hang">🚚 Giao hàng</Link> },
-            { key: '/billing/invoices', to: '/billing/invoices', label: <Link to="/billing/invoices">Hóa đơn VAT</Link> },
+            { key: '/sales/orders', to: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link>, permissions: ['sales_order.view'] },
+            { key: '/sales/returns', to: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link>, permissions: ['sales_order.view'] },
+            { key: '/sales/theo-don-hang', to: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link>, permissions: ['sales_order.view'] },
+            { key: '/sales/giao-hang', to: '/sales/giao-hang', label: <Link to="/sales/giao-hang">🚚 Giao hàng</Link>, permissions: ['sales_order.view'] },
+            { key: '/billing/invoices', to: '/billing/invoices', label: <Link to="/billing/invoices">Hóa đơn VAT</Link>, permissions: ['sales_order.view'] },
           ],
         },
       ],
@@ -209,9 +209,9 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
             { key: '/accounting/cash-book', to: '/accounting/cash-book', label: <Link to="/accounting/cash-book">Sổ quỹ tiền mặt</Link>, permissions: ['accounting.cash_book'] },
             { key: '/accounting/bank-ledger', to: '/accounting/bank-ledger', label: <Link to="/accounting/bank-ledger">Sổ tiền gửi NH</Link>, permissions: ['accounting.bank_ledger'] },
             { key: '/accounting/bank-reconciliation', to: '/accounting/bank-reconciliation', label: <Link to="/accounting/bank-reconciliation">Đối soát ngân hàng</Link>, permissions: ['accounting.bank_ledger'] },
-            { key: '/accounting/khe-uoc-vay', to: '/accounting/khe-uoc-vay', label: <Link to="/accounting/khe-uoc-vay">Khế ước đi vay</Link>, permissions: ['accounting.view'] },
-            { key: '/accounting/khe-uoc-cho-vay', to: '/accounting/khe-uoc-cho-vay', label: <Link to="/accounting/khe-uoc-cho-vay">Khế ước cho vay</Link>, permissions: ['accounting.view'] },
-            { key: '/accounting/du-bao-dong-tien', to: '/accounting/du-bao-dong-tien', label: <Link to="/accounting/du-bao-dong-tien">Dự báo dòng tiền</Link>, permissions: ['accounting.view'] },
+            { key: '/accounting/khe-uoc-vay', to: '/accounting/khe-uoc-vay', label: <Link to="/accounting/khe-uoc-vay">Khế ước đi vay</Link>, permissions: ['accounting.manage'] },
+            { key: '/accounting/khe-uoc-cho-vay', to: '/accounting/khe-uoc-cho-vay', label: <Link to="/accounting/khe-uoc-cho-vay">Khế ước cho vay</Link>, permissions: ['accounting.manage'] },
+            { key: '/accounting/du-bao-dong-tien', to: '/accounting/du-bao-dong-tien', label: <Link to="/accounting/du-bao-dong-tien">Dự báo dòng tiền</Link>, permissions: ['accounting.manage'] },
           ],
         },
         {
@@ -243,8 +243,8 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
         {
           sectionLabel: 'Báo cáo tài chính',
           items: [
-            { key: '/accounting/profit-loss', to: '/accounting/profit-loss', label: <Link to="/accounting/profit-loss">Báo cáo lãi/lỗ</Link>, permissions: ['accounting.view'] },
-            { key: '/accounting/balance-sheet', to: '/accounting/balance-sheet', label: <Link to="/accounting/balance-sheet">Bảng cân đối kế toán</Link>, permissions: ['accounting.view'] },
+            { key: '/accounting/profit-loss', to: '/accounting/profit-loss', label: <Link to="/accounting/profit-loss">Báo cáo lãi/lỗ</Link>, permissions: ['accounting.manage'] },
+            { key: '/accounting/balance-sheet', to: '/accounting/balance-sheet', label: <Link to="/accounting/balance-sheet">Bảng cân đối kế toán</Link>, permissions: ['accounting.manage'] },
           ],
         },
         {

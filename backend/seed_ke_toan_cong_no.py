@@ -1,4 +1,4 @@
-"""Thêm role KE_TOAN_MUA_HANG — Kế Toán Mua Hàng."""
+"""Thêm role KE_TOAN_CONG_NO — Kế Toán Công Nợ Phải Thu."""
 import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 from sqlalchemy import create_engine, text
@@ -7,25 +7,17 @@ from app.config import settings
 DATABASE_URL = settings.DATABASE_URL
 
 ROLE = {
-    "ma_vai_tro": "KE_TOAN_MUA_HANG",
-    "ten_vai_tro": "Kế Toán Mua Hàng",
-    "mo_ta": "Lập phiếu chi trả NCC, đối soát công nợ, hóa đơn mua hàng",
+    "ma_vai_tro": "KE_TOAN_CONG_NO",
+    "ten_vai_tro": "Kế Toán Công Nợ Phải Thu",
+    "mo_ta": "Lập phiếu thu, theo dõi công nợ phải thu, đối soát khách hàng",
     "permissions": [
-        # Kế toán — công nợ phải trả + thanh toán
+        # Kế toán — phải thu
         "accounting.view",
-        "accounting.payments",
-        "accounting.cash_book",
+        "accounting.receipts",
+        "accounting.ar_ledger",
         "accounting.bank_ledger",
-        "accounting.ap_ledger",
-        "accounting.reconciliation",
-        # Mua hàng — đọc để đối soát PO/GR/HĐ
-        "purchase.view",
-        "purchase.orders",
-        "purchase.goods_receipts",
-        "purchase.reports",
         # Danh mục
-        "master.suppliers.view",
-        "master.materials.view",
+        "master.customers.view",
     ],
 }
 

@@ -114,6 +114,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   const adjSelectedItem = adjItems.find(it => it.item_id === adjSelectedItemId) ?? null
 
   const openAdjust = (order: DeliveryOrder) => {
+    setDetailId(order.id)
     const items = order.items.map(it => ({
       item_id: it.id,
       so_lenh: it.so_lenh,

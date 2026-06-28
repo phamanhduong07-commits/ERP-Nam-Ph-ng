@@ -616,7 +616,7 @@ def adjust_delivery_items(
     # Khoá khi hóa đơn đã phát hành
     issued = db.query(SalesInvoice.so_hoa_don).filter(
         SalesInvoice.delivery_id == do_id,
-        SalesInvoice.trang_thai != "huy",
+        SalesInvoice.trang_thai.in_(["da_phat_hanh", "da_tt_mot_phan", "qua_han", "da_tt_du"]),
     ).first()
     if issued:
         raise HTTPException(400, f"Hóa đơn {issued.so_hoa_don} đã phát hành. Không thể điều chỉnh phiếu bán hàng.")

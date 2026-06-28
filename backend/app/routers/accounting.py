@@ -81,6 +81,8 @@ router = APIRouter(prefix="/api/accounting", tags=["accounting"])
 logger = logging.getLogger(__name__)
 
 KE_TOAN_ROLES = ("KE_TOAN_TRUONG", "KE_TOAN_CONG_NO", "KE_TOAN_MUA_HANG", "KETOAN_NHAN_VIEN", "BGD_GIAM_DOC")
+AR_ROLES = ("KE_TOAN_TRUONG", "KE_TOAN_CONG_NO", "KETOAN_NHAN_VIEN", "BGD_GIAM_DOC")
+AP_ROLES = ("KE_TOAN_TRUONG", "KE_TOAN_MUA_HANG", "KETOAN_NHAN_VIEN", "BGD_GIAM_DOC")
 ACCOUNTING_AUDIT_TABLES = {
     "bank_transactions",
     "cash_receipts",
@@ -481,7 +483,7 @@ def list_receipts(
 def create_receipt(
     data: CashReceiptCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     return AccountingService(db).create_cash_receipt(data, current_user.id)
 
@@ -499,7 +501,7 @@ def get_receipt(
 def approve_receipt(
     receipt_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     logger.info("approve_receipt id=%s user=%s", receipt_id, current_user.id)
     return AccountingService(db).approve_receipt(receipt_id, current_user.id)
@@ -510,7 +512,7 @@ def cancel_receipt(
     receipt_id: int,
     ly_do: str | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     logger.info("cancel_receipt id=%s user=%s", receipt_id, current_user.id)
     return AccountingService(db).cancel_receipt(receipt_id, current_user.id, ly_do)
@@ -520,7 +522,7 @@ def cancel_receipt(
 def clone_receipt(
     receipt_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     svc = AccountingService(db)
     src = db.get(CashReceipt, receipt_id)
@@ -553,7 +555,7 @@ def update_receipt(
     receipt_id: int,
     data: CashReceiptUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     return AccountingService(db).update_receipt(receipt_id, data, current_user.id)
 
@@ -563,7 +565,7 @@ def save_receipt_journal_lines(
     receipt_id: int,
     body: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     receipt = db.get(CashReceipt, receipt_id)
     if not receipt:
@@ -584,7 +586,7 @@ def save_receipt_journal_lines(
 def batch_create_receipts(
     data: BatchReceiptCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     from app.schemas.accounting import (
         BatchReceiptResponse,
@@ -668,7 +670,7 @@ async def import_receipts_excel(
     phan_xuong_id: int | None = Query(None),
     dry_run: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     """Import phiếu thu từ Excel. Cột bắt buộc: ma_kh/customer_id, so_tien.
     Cột tùy chọn: so_hoa_don/sales_invoice_id, hinh_thuc_tt, dien_giai, so_tham_chieu."""
@@ -1005,7 +1007,7 @@ def list_purchase_invoices(
 def create_purchase_invoice(
     data: PurchaseInvoiceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     return AccountingService(db).create_purchase_invoice(data, current_user.id)
 
@@ -1025,7 +1027,7 @@ def create_purchase_invoice_from_po(
     thue_suat: Decimal = Query(Decimal("8"), ge=Decimal("0"), le=Decimal("100"), description="VAT: 0, 5, 8, 10"),
     co_vat: bool = Query(True, description="Co hoa don VAT hay khong"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     return AccountingService(db).create_purchase_invoice_from_po(
         po_id, current_user.id, thue_suat=thue_suat, co_vat=co_vat
@@ -1038,7 +1040,7 @@ def create_purchase_invoice_from_gr(
     thue_suat: Decimal = Query(Decimal("8"), ge=Decimal("0"), le=Decimal("100"), description="VAT: 0, 5, 8, 10"),
     co_vat: bool = Query(True, description="Co hoa don VAT hay khong"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     return AccountingService(db).create_purchase_invoice_from_gr(
         gr_id, current_user.id, thue_suat=thue_suat, co_vat=co_vat
@@ -1050,7 +1052,7 @@ def cancel_purchase_invoice(
     inv_id: int,
     ly_do: str | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     logger.info("cancel_purchase_invoice id=%s user=%s", inv_id, current_user.id)
     return AccountingService(db).cancel_purchase_invoice(inv_id, current_user.id, ly_do)
@@ -1181,7 +1183,7 @@ def list_payments(
 def create_payment(
     data: CashPaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     return AccountingService(db).create_cash_payment(data, current_user.id)
 
@@ -1199,7 +1201,7 @@ def get_payment(
 def approve_payment(
     payment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     return AccountingService(db).approve_payment(payment_id, current_user.id)
 
@@ -1209,7 +1211,7 @@ def cancel_payment(
     payment_id: int,
     ly_do: str | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     logger.info("cancel_payment id=%s user=%s", payment_id, current_user.id)
     return AccountingService(db).cancel_payment(payment_id, current_user.id, ly_do)
@@ -1220,7 +1222,7 @@ def save_payment_journal_lines(
     payment_id: int,
     body: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     payment = db.get(CashPayment, payment_id)
     if not payment:
@@ -1237,7 +1239,7 @@ def save_payment_journal_lines(
 def clone_payment(
     payment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     svc = AccountingService(db)
     src = db.get(CashPayment, payment_id)
@@ -1272,7 +1274,7 @@ def update_payment(
     payment_id: int,
     data: CashPaymentUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     return AccountingService(db).update_payment(payment_id, data, current_user.id)
 
@@ -1314,7 +1316,7 @@ def get_tax_obligations(
 def create_tax_payments(
     data: TaxPaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     """Tạo phiếu chi nộp thuế (không cần nhà cung cấp)."""
     svc = AccountingService(db)
@@ -1407,7 +1409,7 @@ def get_insurance_obligations(
 def create_insurance_payments(
     data: InsurancePaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     """Tạo phiếu chi nộp bảo hiểm (không cần nhà cung cấp)."""
     svc = AccountingService(db)
@@ -1496,7 +1498,7 @@ def get_salary_obligations(
 def create_salary_payments(
     data: SalaryPaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     """Tạo phiếu chi trả lương từng nhân viên (không cần nhà cung cấp)."""
     from app.models.hr import PayrollRun
@@ -1589,7 +1591,7 @@ async def import_payments_excel(
     phan_xuong_id: int | None = Query(None),
     dry_run: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     """Import phiếu chi từ Excel. Cột bắt buộc: ma_ncc (hoặc supplier_id), so_tien.
     Cột tùy chọn: hinh_thuc_tt, dien_giai, so_tham_chieu."""
@@ -2359,7 +2361,7 @@ async def import_opening_balances_ar(
     commit: bool = Query(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AR_ROLES)),
 ):
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(400, "Chi chap nhan file Excel .xlsx/.xls")
@@ -2446,7 +2448,7 @@ async def import_opening_balances_ap(
     commit: bool = Query(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*AP_ROLES)),
 ):
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(400, "Chi chap nhan file Excel .xlsx/.xls")

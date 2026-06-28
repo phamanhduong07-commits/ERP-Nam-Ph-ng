@@ -60,15 +60,15 @@ export default function PhieuTraHangPage() {
     queryFn: () => phieuTraHangApi.list({
       loai_hang: filterLoai,
       trang_thai: filterStatus,
-      tu_ngay: filterDates?.[0].format('YYYY-MM-DD'),
-      den_ngay: filterDates?.[1].format('YYYY-MM-DD'),
+      tu_ngay: filterDates?.[0]?.format('YYYY-MM-DD'),
+      den_ngay: filterDates?.[1]?.format('YYYY-MM-DD'),
     }),
   })
 
   const { data: customers = [] } = useQuery<SelectOption[]>({
     queryKey: ['customers-select'],
     queryFn: () =>
-      api.get('/api/customers?limit=500').then(r =>
+      api.get('/customers?limit=500').then(r =>
         r.data.map((c: { id: number; ten_viet_tat: string; ten_kh: string }) => ({
           value: c.id,
           label: c.ten_viet_tat || c.ten_kh,
@@ -79,7 +79,7 @@ export default function PhieuTraHangPage() {
   const { data: warehousesPhoi = [] } = useQuery<SelectOption[]>({
     queryKey: ['warehouses-phoi-select'],
     queryFn: () =>
-      api.get('/api/warehouses').then(r =>
+      api.get('/warehouses').then(r =>
         r.data
           .filter((w: { loai_kho: string }) => w.loai_kho === 'PHOI')
           .map((w: { id: number; ten_kho: string }) => ({ value: w.id, label: w.ten_kho }))
@@ -89,7 +89,7 @@ export default function PhieuTraHangPage() {
   const { data: warehousesTp = [] } = useQuery<SelectOption[]>({
     queryKey: ['warehouses-tp-select'],
     queryFn: () =>
-      api.get('/api/warehouses').then(r =>
+      api.get('/warehouses').then(r =>
         r.data
           .filter((w: { loai_kho: string }) =>
             ['TP', 'THANH_PHAM', 'thanh_pham'].includes(w.loai_kho)
@@ -105,7 +105,7 @@ export default function PhieuTraHangPage() {
     queryKey: ['lsx-by-customer', customerId],
     enabled: !!customerId,
     queryFn: () =>
-      api.get(`/api/production-orders?customer_id=${customerId}&limit=200`).then(r =>
+      api.get(`/production-orders?customer_id=${customerId}&limit=200`).then(r =>
         r.data.items?.map((o: { id: number; so_lenh: string }) => ({
           value: o.id,
           label: o.so_lenh,
@@ -117,7 +117,7 @@ export default function PhieuTraHangPage() {
     queryKey: ['products-select'],
     enabled: loaiHang === 'THANH_PHAM',
     queryFn: () =>
-      api.get('/api/products?limit=500').then(r =>
+      api.get('/products?limit=500').then(r =>
         (r.data?.items ?? r.data ?? []).map((p: { id: number; ten_hang: string; ma_hang: string }) => ({
           value: p.id,
           label: p.ten_hang || p.ma_hang,
@@ -611,7 +611,7 @@ export default function PhieuTraHangPage() {
           />
           <RangePicker
             format="DD/MM/YYYY"
-            value={filterDates}
+            value={filterDates ?? undefined}
             onChange={(dates) => setFilterDates(dates as [Dayjs, Dayjs] | null)}
             placeholder={['Từ ngày', 'Đến ngày']}
           />
@@ -619,14 +619,13 @@ export default function PhieuTraHangPage() {
 
         <Table
           rowKey="id"
-          dataSource={rows}
+          dataSource={Array.isArray(rows) ? rows : []}
           columns={columns}
           loading={isLoading}
           size="small"
           pagination={{ pageSize: 50, showSizeChanger: false }}
           expandable={{
             expandedRowRender,
-            rowExpandable: (row) => (row.items?.length ?? 0) > 0,
           }}
         />
       </Card>
