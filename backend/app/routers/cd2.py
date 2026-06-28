@@ -294,6 +294,16 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
     if existing:
         return existing
 
+    # Nếu nhân viên đã nhập kho TP qua quét mã (phieu_in_id=NULL), link vào thay vì tạo duplicate
+    scan_based = db.query(ProductionOutput).filter(
+        ProductionOutput.production_order_id == p.production_order_id,
+        ProductionOutput.phieu_in_id == None,
+    ).first()
+    if scan_based:
+        scan_based.phieu_in_id = p.id
+        db.flush()
+        return scan_based
+
     # Resolve phan_xuong_id: PhieuIn → may_sau_in → ProductionOrder
     po: Optional[ProductionOrder] = None
     phan_xuong_id: Optional[int] = p.phan_xuong_id
@@ -363,6 +373,7 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
         trang_thai_loi='da_nhap_kho_ao' if sl_loi > 0 else None,
         dvt="Thùng",
         don_gia_xuat_xuong=don_gia,
+        phieu_in_id=p.id,
         ghi_chu=f"Tự động từ phiếu in {p.so_phieu}",
         created_by=user_id,
     )
@@ -575,8 +586,8 @@ def get_sauin_kanban(
             joinedload(PhieuIn.may_sau_in_obj),
             joinedload(PhieuIn.production_order).selectinload(ProductionOrder.items),
         )
-        # cho_dinh_hinh: vừa xong in, chờ tổ trưởng gán máy định hình
-        .filter(PhieuIn.trang_thai.in_(["cho_dinh_hinh", "sau_in", "dang_sau_in"]))
+        # Hiện tất cả LSX đang active để định hình quét sớm
+        .filter(PhieuIn.trang_thai.in_(["cho_in", "ke_hoach", "dang_in", "cho_dinh_hinh", "sau_in", "dang_sau_in"]))
     )
     if phan_xuong_id is not None:
         q_phieu = q_phieu.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
@@ -708,16 +719,18 @@ def list_phieu_in(
     if may_in_id is not None:
         q = q.filter(PhieuIn.may_in_id == may_in_id)
     if may_sau_in_id is not None:
-        # Pool model: thấy toàn bộ phiếu chưa gán máy + phiếu đang/đã xử lý của máy này
+        # Pool model: thấy toàn bộ phiếu của xưởng (kể cả đang in) + phiếu đã gán máy này
         if not trang_thai:
             from sqlalchemy import or_, and_
+            sau_in_obj = db.get(MaySauIn, may_sau_in_id)
+            wx_id = sau_in_obj.phan_xuong_id if sau_in_obj else None
+            early_cond = PhieuIn.trang_thai.in_(["cho_in", "ke_hoach", "dang_in", "cho_dinh_hinh"])
+            if wx_id:
+                early_cond = and_(early_cond, PhieuIn.phan_xuong_id == wx_id)
             q = q.filter(
                 or_(
-                    # Phiếu chưa gán máy — bao gồm cho_dinh_hinh, sau_in, dang_sau_in không có may_sau_in
-                    and_(
-                        PhieuIn.trang_thai.in_(["cho_dinh_hinh", "sau_in", "dang_sau_in"]),
-                        PhieuIn.may_sau_in_id is None,
-                    ),
+                    # Phiếu đang in / chờ in — cùng xưởng — TP quét sớm
+                    early_cond,
                     # Phiếu đã gán đúng máy này
                     and_(
                         PhieuIn.may_sau_in_id == may_sau_in_id,
@@ -1262,14 +1275,14 @@ async def start_sau_in(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     """Bắt đầu định hình → trạng thái sau_in, ghi giờ bắt đầu, gán may_sau_in_id."""
+    _PARALLEL_STATES = {"cho_in", "ke_hoach", "dang_in"}
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
-    if p.trang_thai != "cho_dinh_hinh":
+    if p.trang_thai not in ("cho_dinh_hinh", *_PARALLEL_STATES):
         raise HTTPException(
             status_code=400,
-            detail=f"Phiếu phải ở trạng thái 'cho_dinh_hinh', hiện tại: '{
-                p.trang_thai}'")
+            detail=f"Phiếu phải ở trạng thái 'cho_dinh_hinh' hoặc đang in, hiện tại: '{p.trang_thai}'")
 
     # Resolve may_sau_in_id: body > PrinterUser > giữ nguyên
     msi_id = body.may_sau_in_id
@@ -1280,15 +1293,24 @@ async def start_sau_in(
     if msi_id is not None:
         p.may_sau_in_id = msi_id
 
-    p.trang_thai = "sau_in"
     if not p.gio_bat_dau_dinh_hinh:
         p.gio_bat_dau_dinh_hinh = datetime.now()
     for k, v in body.model_dump(exclude_none=True, exclude={"may_sau_in_id", "printer_user_id"}).items():
         setattr(p, k, v)
     user_id = current_user.id if current_user else None
-    _log_state_change(db, p, "cho_dinh_hinh", "sau_in", "start_sau_in", user_id)
+
+    is_parallel = p.trang_thai in _PARALLEL_STATES
+    if is_parallel:
+        # Song song: in vẫn chạy — chỉ gán máy + giờ bắt đầu TP, giữ trang_thai
+        _log_state_change(db, p, p.trang_thai, p.trang_thai, "start_tp_parallel", user_id)
+        event_trang_thai = p.trang_thai
+    else:
+        p.trang_thai = "sau_in"
+        _log_state_change(db, p, "cho_dinh_hinh", "sau_in", "start_sau_in", user_id)
+        event_trang_thai = "sau_in"
+
     db.commit()
-    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "start_sau_in", "trang_thai": "sau_in"})
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "start_sau_in", "trang_thai": event_trang_thai})
     return _to_dict(_load(phieu_id, db))
 
 
@@ -1299,13 +1321,13 @@ async def finish_sau_in(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    _PARALLEL_STATES = {"cho_in", "ke_hoach", "dang_in"}
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
-    if p.trang_thai not in ("sau_in", "dang_sau_in"):
+    if p.trang_thai not in ("sau_in", "dang_sau_in", *_PARALLEL_STATES):
         raise HTTPException(
-            status_code=400, detail=f"Phiếu đang ở trạng thái '{
-                p.trang_thai}', phải là 'sau_in' hoặc 'dang_sau_in' để hoàn thành")
+            status_code=400, detail=f"Phiếu đang ở trạng thái '{p.trang_thai}', không thể hoàn thành TP")
     if body:
         ref = p.so_luong_in_ok or p.so_luong_phoi
         if body.so_luong_sau_in_ok is not None:
@@ -1318,15 +1340,24 @@ async def finish_sau_in(
     prev_finish_state = p.trang_thai
     if not p.gio_bat_dau_dinh_hinh:
         p.gio_bat_dau_dinh_hinh = datetime.now()
-    p.trang_thai = "hoan_thanh"
-    p.gio_hoan_thanh = datetime.now()
     p.gio_hoan_thanh_dinh_hinh = datetime.now()
     user_id = current_user.id if current_user else None
     _auto_nhap_thanh_pham(db, p, user_id)
-    _log_state_change(db, p, prev_finish_state, "hoan_thanh", "finish_sau_in", user_id)
+
+    is_parallel = p.trang_thai in _PARALLEL_STATES
+    if is_parallel:
+        # Song song: in vẫn chạy — chỉ ghi nhận TP xong, không chuyển sang hoan_thanh
+        _log_state_change(db, p, prev_finish_state, prev_finish_state, "finish_tp_parallel", user_id)
+        event_trang_thai = prev_finish_state
+    else:
+        p.trang_thai = "hoan_thanh"
+        p.gio_hoan_thanh = datetime.now()
+        _log_state_change(db, p, prev_finish_state, "hoan_thanh", "finish_sau_in", user_id)
+        event_trang_thai = "hoan_thanh"
+
     db.commit()
     await sio.emit("machine_status_update", {
-        "phieu_in_id": phieu_id, "event": "finish_sau_in", "trang_thai": "hoan_thanh",
+        "phieu_in_id": phieu_id, "event": "finish_sau_in", "trang_thai": event_trang_thai,
     })
     return _to_dict(_load(phieu_id, db))
 
@@ -1906,6 +1937,130 @@ def delete_scan_log(log_id: int, db: Session = Depends(get_db), _: User = Depend
     db.delete(s)
     db.commit()
     return {"ok": True}
+
+
+# ── Nhập kho TP qua quét mã (song song với luồng in) ──────────────────────────
+
+class NhapKhoTPScanBody(BaseModel):
+    so_lsx: str = Field(min_length=1, max_length=50)
+    so_luong_nhap: Decimal
+    so_luong_loi: Decimal = Decimal("0")
+    ghi_chu: Optional[str] = None
+
+
+@router.post("/nhap-kho-tp-scan", status_code=201)
+def nhap_kho_tp_scan(
+    data: NhapKhoTPScanBody,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """Nhập kho thành phẩm qua quét mã LSX — không phụ thuộc trạng thái PhieuIn.
+    Cho phép nhân viên TP nhập kho song song trong khi nhân viên in vẫn đang sản xuất.
+    """
+    if data.so_luong_nhap <= 0:
+        raise HTTPException(400, "Số lượng nhập phải lớn hơn 0")
+
+    order = (
+        db.query(ProductionOrder)
+        .options(joinedload(ProductionOrder.items))
+        .filter(ProductionOrder.so_lenh == data.so_lsx)
+        .first()
+    )
+    if not order:
+        raise HTTPException(404, f"Không tìm thấy LSX: {data.so_lsx}")
+
+    phan_xuong_id = order.phan_xuong_id
+    if not phan_xuong_id:
+        raise HTTPException(400, "LSX chưa gắn xưởng sản xuất")
+
+    kho = _get_workshop_warehouse(db, phan_xuong_id, "THANH_PHAM")
+    if not kho:
+        raise HTTPException(400, "Xưởng sản xuất chưa có kho THÀNH PHẨM. Vui lòng khởi tạo kho cho xưởng trước.")
+
+    product_id = None
+    ten_hang = ""
+    don_gia = Decimal("0")
+    if order.items:
+        first_item = order.items[0]
+        product_id = first_item.product_id
+        ten_hang = first_item.ten_hang or ""
+        if first_item.gia_ban_muc_tieu:
+            don_gia = Decimal(str(first_item.gia_ban_muc_tieu))
+
+    ym = date.today().strftime("%Y%m")
+    pattern = f"TP-{ym}-%"
+    last_so = db.query(func.max(ProductionOutput.so_phieu)).filter(
+        ProductionOutput.so_phieu.like(pattern)
+    ).scalar()
+    seq = 1
+    if last_so:
+        try:
+            seq = int(last_so.rsplit("-", 1)[-1]) + 1
+        except (ValueError, IndexError):
+            seq = 1
+
+    user_id = current_user.id if current_user else None
+    sl = Decimal(str(data.so_luong_nhap))
+    sl_loi = Decimal(str(data.so_luong_loi))
+    ghi_chu = data.ghi_chu or f"Quét mã nhập kho TP — {data.so_lsx}"
+
+    out = ProductionOutput(
+        so_phieu=f"TP-{ym}-{seq:04d}",
+        ngay_nhap=date.today(),
+        production_order_id=order.id,
+        warehouse_id=kho.id,
+        product_id=product_id,
+        ten_hang=ten_hang,
+        so_luong_nhap=sl,
+        so_luong_loi=sl_loi,
+        trang_thai_loi='da_nhap_kho_ao' if sl_loi > 0 else None,
+        dvt="Thùng",
+        don_gia_xuat_xuong=don_gia,
+        phieu_in_id=None,
+        ghi_chu=ghi_chu,
+        created_by=user_id,
+    )
+    try:
+        db.add(out)
+        db.flush()
+        bal = _get_or_create_balance(db, kho.id, product_id=product_id, ten_hang=ten_hang, don_vi="Thùng")
+        _nhap_balance(bal, sl, don_gia)
+        _log_tx(
+            db, kho.id, "NHAP_SX", sl, don_gia, bal.ton_luong,
+            "production_outputs", out.id, user_id,
+            product_id=product_id,
+            ghi_chu=f"Quét mã nhập kho TP — {data.so_lsx}",
+        )
+        if sl_loi > 0:
+            auto_defect_record(
+                db,
+                ref_id=out.id,
+                ref_type="production_output",
+                khau="tp",
+                so_luong=sl_loi,
+                created_by=user_id,
+            )
+        db.commit()
+        db.refresh(out)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(500, f"Lỗi nhập kho thành phẩm: {exc}") from exc
+
+    return {
+        "id": out.id,
+        "so_phieu": out.so_phieu,
+        "ngay_nhap": out.ngay_nhap.isoformat(),
+        "production_order_id": out.production_order_id,
+        "so_lsx": data.so_lsx,
+        "ten_hang": out.ten_hang,
+        "warehouse_id": out.warehouse_id,
+        "so_luong_nhap": float(out.so_luong_nhap),
+        "so_luong_loi": float(out.so_luong_loi),
+        "don_gia_xuat_xuong": float(out.don_gia_xuat_xuong),
+        "ghi_chu": out.ghi_chu,
+    }
 
 
 # ── Dashboard ──────────────────────────────────────────────────────────────────

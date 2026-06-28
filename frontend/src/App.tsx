@@ -66,6 +66,7 @@ const KhoLoiPage = lazy(() => import('./pages/production/KhoLoiPage'))
 const PhieuNhapPhoiSongPage = lazy(() => import('./pages/production/PhieuNhapPhoiSongPage'))
 const CD2KanbanPage = lazy(() => import('./pages/production/CD2KanbanPage'))
 const ScanMayPage = lazy(() => import('./pages/production/ScanMayPage'))
+const ScanNhapKhoTPPage = lazy(() => import('./pages/production/ScanNhapKhoTPPage'))
 const ScanHistoryPage = lazy(() => import('./pages/production/ScanHistoryPage'))
 const CD2DashboardPage = lazy(() => import('./pages/production/CD2DashboardPage'))
 const PhieuInHistoryPage = lazy(() => import('./pages/production/PhieuInHistoryPage'))
@@ -327,6 +328,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/production/cd2/mobile-tracking" element={<WorkerOrPrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/production/cd2/scan" element={<WorkerOrPrivateRoute><ErrorBoundary><ScanMayPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
+          <Route path="/production/cd2/nhap-kho-tp" element={<WorkerOrPrivateRoute><ErrorBoundary><ScanNhapKhoTPPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/production/may-song" element={<WorkerOrPrivateRoute><ErrorBoundary><MaySongPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
           <Route path="/gate-login" element={<ErrorBoundary><GateLoginPage /></ErrorBoundary>} />

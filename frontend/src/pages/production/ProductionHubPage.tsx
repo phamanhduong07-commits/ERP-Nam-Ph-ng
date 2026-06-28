@@ -39,6 +39,7 @@ const GROUPS: HubGroup[] = [
       { icon: '📊', label: 'Thống kê SL', to: '/production/cd2/history' },
       { icon: '👷', label: 'Máy in của tôi', to: '/production/cd2/worker' },
       { icon: '⏰', label: 'Quản lý ca', to: '/production/cd2/shift' },
+      { icon: '📦', label: 'Quét mã nhập kho TP', to: '/production/cd2/nhap-kho-tp' },
       { icon: '⚙️', label: 'Cấu hình CD2', to: '/production/cd2/config', permissions: ['master.other.manage'] },
     ],
   },

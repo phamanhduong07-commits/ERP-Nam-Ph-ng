@@ -313,10 +313,17 @@ export default function MobileTrackingPage() {
 
   // Sau in (thành phẩm) mode states
   // sau_in chưa có may_sau_in_id = desktop đã bắt đầu nhưng chưa gán máy → worker chưa nhận
+  const PARALLEL_PRINT_STATES = ['cho_in', 'ke_hoach', 'dang_in']
+  const isParallelPrinting = PARALLEL_PRINT_STATES.includes(currentOrder?.trang_thai ?? '')
+  // Song song: in vẫn chạy nhưng TP đã bắt đầu (backend set gio_bat_dau_dinh_hinh)
+  const parallelTpStarted = isParallelPrinting && !!currentOrder?.gio_bat_dau_dinh_hinh
+
   const isSauInPending = currentOrder?.trang_thai === 'cho_dinh_hinh'
     || (currentOrder?.trang_thai === 'sau_in' && !currentOrder?.may_sau_in_id)
-  const isSauInRunning = ((currentOrder?.trang_thai === 'sau_in' && !!currentOrder?.may_sau_in_id)
-    || currentOrder?.trang_thai === 'dang_sau_in') && !currentOrder?.tam_dung_luc
+    || (isParallelPrinting && !parallelTpStarted)
+  const isSauInRunning = (((currentOrder?.trang_thai === 'sau_in' && !!currentOrder?.may_sau_in_id)
+    || currentOrder?.trang_thai === 'dang_sau_in'
+    || parallelTpStarted) && !currentOrder?.tam_dung_luc)
   const isSauInPaused  = ((currentOrder?.trang_thai === 'sau_in' && !!currentOrder?.may_sau_in_id)
     || currentOrder?.trang_thai === 'dang_sau_in') && !!currentOrder?.tam_dung_luc
   const isSauInDone    = currentOrder?.trang_thai === 'hoan_thanh'
@@ -569,23 +576,26 @@ export default function MobileTrackingPage() {
 
   const dinhHinhStartMutation = useMutation({
     mutationFn: async (phieu_id: number) => {
-      // Nếu phiếu chưa được gán máy (cho_dinh_hinh hoặc sau_in chưa có máy), gọi sau-in trước
-      if (
-        currentOrder?.trang_thai === 'cho_dinh_hinh' ||
-        (currentOrder?.trang_thai === 'sau_in' && !currentOrder?.may_sau_in_id)
-      ) {
+      const tt = currentOrder?.trang_thai ?? ''
+      const isParallel = PARALLEL_PRINT_STATES.includes(tt)
+      const needsAssign = tt === 'cho_dinh_hinh' || (tt === 'sau_in' && !currentOrder?.may_sau_in_id) || isParallel
+      if (needsAssign) {
         await cd2Api.startSauIn(phieu_id, {
           may_sau_in_id: selectedMachine?.id,
           printer_user_id: workerSession?.printer_user_id,
         })
       }
+      // Parallel: in vẫn chạy — không gọi batDauSauIn (yêu cầu trạng thái sau_in)
+      if (isParallel) return
       return cd2Api.batDauSauIn(phieu_id)
     },
     onSuccess: () => {
       message.success('Đã bắt đầu làm thành phẩm!')
+      const isParallel = PARALLEL_PRINT_STATES.includes(currentOrder?.trang_thai ?? '')
       setCurrentOrder(prev => prev ? {
         ...prev,
-        trang_thai: 'dang_sau_in',
+        // Parallel: giữ trang_thai gốc (in vẫn chạy), chỉ set may_sau_in_id + gio_bat_dau_dinh_hinh
+        trang_thai: isParallel ? (prev.trang_thai) : 'dang_sau_in',
         may_sau_in_id: selectedMachine?.id ?? prev.may_sau_in_id ?? null,
         gio_bat_dau_dinh_hinh: prev.gio_bat_dau_dinh_hinh ?? new Date().toISOString(),
       } : prev)
@@ -598,8 +608,14 @@ export default function MobileTrackingPage() {
     mutationFn: (body: { so_luong_sau_in_ok?: number; so_luong_sau_in_loi?: number; ghi_chu_sau_in?: string }) =>
       cd2Api.hoanThanh(currentOrder!.id, { ...body, printer_user_id: workerSession?.printer_user_id }),
     onSuccess: () => {
-      message.success('Đã hoàn thành — đã nhập kho thành phẩm!')
-      setCurrentOrder(prev => prev ? { ...prev, trang_thai: 'hoan_thanh' } : prev)
+      const isParallel = PARALLEL_PRINT_STATES.includes(currentOrder?.trang_thai ?? '')
+      message.success(isParallel ? 'Đã ghi nhận TP xong — đã nhập kho!' : 'Đã hoàn thành — đã nhập kho thành phẩm!')
+      setCurrentOrder(prev => prev ? {
+        ...prev,
+        // Parallel: giữ trang_thai để printer tiếp tục; đánh dấu TP done bằng gio_hoan_thanh_dinh_hinh
+        trang_thai: isParallel ? prev.trang_thai : 'hoan_thanh',
+        gio_hoan_thanh_dinh_hinh: new Date().toISOString(),
+      } : prev)
       setIsDinhHinhCompleteModalOpen(false)
       dinhHinhForm.resetFields()
       invalidate()

@@ -432,6 +432,10 @@ export const cd2Api = {
     client.get<ProductionWageSummaryItem[]>('/cd2/production-wage-summary', {
       params: { from_date, to_date, phan_xuong_id },
     }),
+
+  // Nhập kho TP qua quét mã — song song với luồng in, không cần PhieuIn hoàn thành
+  nhapKhoTPScan: (data: { so_lsx: string; so_luong_nhap: number; so_luong_loi?: number; ghi_chu?: string }) =>
+    client.post<NhapKhoTPScanResult>('/cd2/nhap-kho-tp-scan', data),
 }
 
 export interface WorkerDayStats {
@@ -448,4 +452,18 @@ export interface ProductionWageSummaryItem {
   tong_m2: number
   tong_tien_luong: number
   chi_tiet: { loai_may: string; so_lan: number; tong_m2: number; tien_luong: number }[]
+}
+
+export interface NhapKhoTPScanResult {
+  id: number
+  so_phieu: string
+  ngay_nhap: string
+  production_order_id: number
+  so_lsx: string
+  ten_hang: string | null
+  warehouse_id: number
+  so_luong_nhap: number
+  so_luong_loi: number
+  don_gia_xuat_xuong: number
+  ghi_chu: string | null
 }
