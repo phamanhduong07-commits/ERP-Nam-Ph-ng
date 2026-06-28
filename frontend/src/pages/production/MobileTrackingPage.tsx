@@ -1110,8 +1110,13 @@ export default function MobileTrackingPage() {
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text strong style={{ fontSize: 14 }}>{phieu.so_lsx || phieu.so_phieu}</Text>
-                    <Tag color={TRANG_THAI_COLORS[phieu.trang_thai] ?? 'default'} style={{ margin: 0, fontSize: 11 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <Text strong style={{ fontSize: 14 }}>{phieu.so_lsx || phieu.so_phieu}</Text>
+                      {phieu.so_lsx && phieu.so_phieu && (
+                        <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>({phieu.so_phieu})</Text>
+                      )}
+                    </div>
+                    <Tag color={TRANG_THAI_COLORS[phieu.trang_thai] ?? 'default'} style={{ margin: 0, fontSize: 11, flexShrink: 0 }}>
                       {TRANG_THAI_LABELS[phieu.trang_thai] ?? phieu.trang_thai}
                     </Tag>
                   </div>
