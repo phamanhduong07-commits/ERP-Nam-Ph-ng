@@ -458,15 +458,9 @@ def duyet_task(
                 f"số lượng giao ({float(task.so_luong_cu):g})",
             )
 
-        _ratio = Decimal(str(task.so_luong_cu - sl_bh)) / Decimal(str(task.so_luong_cu))
-        it.so_luong = task.so_luong_cu - sl_bh
-        it.thanh_tien = it.so_luong * (it.don_gia or Decimal("0"))
-        if it.dien_tich is not None:
-            it.dien_tich = round(it.dien_tich * _ratio, 4)
-        if it.trong_luong is not None:
-            it.trong_luong = round(it.trong_luong * _ratio, 3)
-        if it.the_tich is not None:
-            it.the_tich = round(it.the_tich * _ratio, 4)
+        # so_luong GIỮ NGUYÊN (physical delivery vẫn là sl_cu thùng)
+        # Chỉ giảm thanh_tien: KH chỉ trả tiền (sl_cu - sl_bh) thùng
+        it.thanh_tien = (task.so_luong_cu - sl_bh) * (it.don_gia or Decimal("0"))
         it.tinh_trang_dieu_chinh = task.tinh_trang
         it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
 
