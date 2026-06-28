@@ -445,36 +445,32 @@ def duyet_task(
             do.id, ghi_chu=f"Hậu giao {do.so_phieu}: tính thêm tiền {it.ten_hang}"
         )
 
-    # ── xuat_bu_hao: xuất kho thêm + dòng 0đ + JournalEntry ─────────────────
+    # ── xuat_bu_hao: giảm billing sl_bh + dòng 0đ trên phiếu ───────────────
+    # sl_bh thùng bù hao đã nằm trong sl giao rồi — chỉ giảm billing, không xuất thêm kho
     elif task.huong_xu_ly == "xuat_bu_hao":
         sl_bh = task.so_luong_bu_hao
         if sl_bh <= 0:
             raise HTTPException(400, "so_luong_bu_hao phải > 0")
-        if not do.warehouse_id:
-            raise HTTPException(400, "Phiếu giao hàng chưa có kho xuất")
-        bal = _get_or_create_balance(
-            db, do.warehouse_id,
-            product_id=it.product_id,
-            ten_hang=it.ten_hang or "", don_vi=it.dvt or "Thùng",
-            lock=True,
-        )
-        if bal.ton_luong < sl_bh:
+        if sl_bh >= task.so_luong_cu:
             raise HTTPException(
                 400,
-                f"Không đủ tồn kho để bù hao: {it.ten_hang} — "
-                f"cần {float(sl_bh):g}, còn {float(bal.ton_luong):g}",
+                f"Bù hao ({float(sl_bh):g}) không được lớn hơn hoặc bằng "
+                f"số lượng giao ({float(task.so_luong_cu):g})",
             )
-        gia_von = bal.don_gia_binh_quan * sl_bh  # lấy trước khi xuat
-        _xuat_balance(bal, sl_bh, it.ten_hang or "")
-        _log_tx(
-            db, do.warehouse_id, "XUAT_BU_HAO",
-            sl_bh, bal.don_gia_binh_quan, bal.ton_luong,
-            "delivery_post_tasks", task.id, current_user.id,
-            product_id=it.product_id,
-            ghi_chu=f"Bù hao {do.so_phieu}: {it.ten_hang}",
-        )
 
-        # Dòng mới 0đ trên phiếu
+        _ratio = Decimal(str(task.so_luong_cu - sl_bh)) / Decimal(str(task.so_luong_cu))
+        it.so_luong = task.so_luong_cu - sl_bh
+        it.thanh_tien = it.so_luong * (it.don_gia or Decimal("0"))
+        if it.dien_tich is not None:
+            it.dien_tich = round(it.dien_tich * _ratio, 4)
+        if it.trong_luong is not None:
+            it.trong_luong = round(it.trong_luong * _ratio, 3)
+        if it.the_tich is not None:
+            it.the_tich = round(it.the_tich * _ratio, 4)
+        it.tinh_trang_dieu_chinh = task.tinh_trang
+        it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
+
+        # Dòng 0đ trên phiếu (sl_bh thùng — ghi nhận vật lý giao cho KH miễn phí)
         db.add(DeliveryOrderItem(
             delivery_id=do.id,
             product_id=it.product_id,
@@ -489,35 +485,13 @@ def duyet_task(
             ghi_chu=f"Bù hao từ task #{task.id}",
         ))
 
-        # JournalEntry: Nợ 641 / Có 155 = giá vốn bình quân × số lượng
-        if gia_von > 0:
-            acct = AccountingService(db)
-            acct._create_journal_entry(
-                ngay=date.today(),
-                dien_giai=f"Bù hao {float(sl_bh):g} {it.dvt or ''} {it.ten_hang} - Phiếu {do.so_phieu}",
-                loai_but_toan="bu_hao_ban_hang",
-                chung_tu_loai="delivery_post_tasks",
-                chung_tu_id=task.id,
-                lines=[
-                    {
-                        "so_tk": "641",
-                        "so_tien_no": gia_von,
-                        "so_tien_co": Decimal("0"),
-                        "dien_giai": f"CP bù hao: {it.ten_hang} x{float(sl_bh):g}",
-                    },
-                    {
-                        "so_tk": "155",
-                        "so_tien_no": Decimal("0"),
-                        "so_tien_co": gia_von,
-                        "dien_giai": f"Xuất TP bù hao: {it.ten_hang} x{float(sl_bh):g}",
-                    },
-                ],
-                phap_nhan_id=do.phap_nhan_id,
-                user_id=current_user.id,
-            )
-
-        it.tinh_trang_dieu_chinh = task.tinh_trang
-        it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
+        do.tong_tien_hang = sum((i.thanh_tien or Decimal("0")) for i in do.items)
+        do.tong_thanh_toan = (do.tong_tien_hang or Decimal("0")) + (do.tien_van_chuyen or Decimal("0"))
+        db.flush()
+        BillingService(db).sync_invoice_to_delivery(
+            do.id,
+            ghi_chu=f"Hậu giao {do.so_phieu}: bù hao {float(sl_bh):g} {it.dvt or ''} {it.ten_hang}",
+        )
 
     task.trang_thai = "hoan_thanh"
     task.approved_by_id = current_user.id

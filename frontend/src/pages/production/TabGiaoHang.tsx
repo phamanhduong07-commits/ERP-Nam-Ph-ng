@@ -2219,7 +2219,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
               </Form.Item>
               <Alert
                 type="warning"
-                message="Bù hao: hóa đơn không đổi. Hệ thống sẽ xuất kho thêm và tạo dòng 0đ trên phiếu. Kế toán tự động Nợ 641 / Có 155 theo giá vốn bình quân."
+                message="Bù hao: hệ thống sẽ giảm số lượng billed và tạo dòng 0đ trên phiếu. VD: giao 105 bù hao 5 → hóa đơn tính 100 thùng."
                 showIcon
                 style={{ marginBottom: 12 }}
               />
