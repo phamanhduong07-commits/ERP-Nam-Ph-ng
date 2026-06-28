@@ -1136,7 +1136,8 @@ export default function MobileTrackingPage() {
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
                     {phieu.loai && <Tag style={{ fontSize: 10, margin: 0, borderRadius: 4, padding: '0 5px' }}>{phieu.loai}</Tag>}
                     {phieu.ths && <Tag color="blue" style={{ fontSize: 10, margin: 0, borderRadius: 4, padding: '0 5px' }}>{phieu.ths}</Tag>}
-                    {phieu.pp_ghep && <Tag color="purple" style={{ fontSize: 10, margin: 0, borderRadius: 4, padding: '0 5px' }}>{phieu.pp_ghep}</Tag>}
+                    {phieu.pp_ghep && <Tag color="geekblue" style={{ fontSize: 10, margin: 0, borderRadius: 4, padding: '0 5px' }}>{phieu.pp_ghep}</Tag>}
+                    {phieu.in_2_lan && <Tag color="purple" style={{ fontSize: 10, margin: 0, borderRadius: 4, padding: '0 5px' }}>In 2 lần</Tag>}
                     {elapsed && (
                       <Tag color="green" icon={<ClockCircleOutlined />} style={{ fontSize: 10, margin: 0, borderRadius: 4, padding: '0 5px' }}>
                         {elapsed}

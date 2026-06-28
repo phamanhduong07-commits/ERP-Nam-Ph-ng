@@ -450,6 +450,9 @@ function KanbanCard({
           {phieu.loai && (
             <Tag style={{ fontSize: 10, margin: 0 }}>{phieu.loai}</Tag>
           )}
+          {phieu.in_2_lan && (
+            <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>In 2 lần</Tag>
+          )}
         </div>
 
         {phieu.ngay_giao_hang && (

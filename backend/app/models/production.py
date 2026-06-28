@@ -24,6 +24,7 @@ class ProductionOrder(Base):
     so_po_kh: Mapped[str | None] = mapped_column(String(100))
     don_gia_noi_bo: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     tan_dung: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
+    in_2_lan: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     kho_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id"))

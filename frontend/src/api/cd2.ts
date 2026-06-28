@@ -151,6 +151,8 @@ export interface PhieuIn {
   // Số phôi và số con thực tế (tính từ so_luong_in_ok khi hoàn thành)
   so_phoi_thuc_te?: number | null
   so_con_thuc_te?: number | null
+  // In 2 lần (kế thừa từ ProductionOrder)
+  in_2_lan?: boolean
 }
 
 export interface CompletePayload {

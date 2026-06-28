@@ -22,6 +22,7 @@ import CustomSidebarNav, { type NavItem, type FlyoutSection, type SubItem } from
 import GlobalSearchModal from './GlobalSearchModal'
 import { HotkeyProvider } from '../contexts/HotkeyContext'
 import { useHotkey } from '../hooks/useHotkey'
+import { useDataChangeSync } from '../hooks/useDataChangeSync'
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal'
 const namPhuongLogo = '/logo_namphuong.png'
 
@@ -47,7 +48,7 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
       key: 'ban-hang',
       icon: <ShoppingCartOutlined />,
       label: 'Bán hàng',
-      permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'],
+      permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve', 'accounting.ar_ledger'],
       flyoutSections: [
         {
           items: [
@@ -68,7 +69,7 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
             { key: '/sales/returns', to: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link>, permissions: ['sales_order.view'] },
             { key: '/sales/theo-don-hang', to: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link>, permissions: ['sales_order.view'] },
             { key: '/sales/giao-hang', to: '/sales/giao-hang', label: <Link to="/sales/giao-hang">🚚 Giao hàng</Link>, permissions: ['sales_order.view'] },
-            { key: '/billing/invoices', to: '/billing/invoices', label: <Link to="/billing/invoices">Hóa đơn VAT</Link>, permissions: ['sales_order.view'] },
+            { key: '/billing/invoices', to: '/billing/invoices', label: <Link to="/billing/invoices">Hóa đơn VAT</Link>, permissions: ['sales_order.view', 'accounting.ar_ledger'] },
           ],
         },
       ],
@@ -409,6 +410,7 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
 }
 
 function AppLayoutInner() {
+  useDataChangeSync()
   const [collapsed, setCollapsed] = useState(false)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
   const [changePwdLoading, setChangePwdLoading] = useState(false)
@@ -602,7 +604,7 @@ function AppLayoutInner() {
   const handleUserMenu = ({ key }: { key: string }) => {
     if (key === 'logout') {
       logout()
-      navigate('/login')
+      window.location.href = '/login'
     }
     if (key === 'settings') {
       changePwdForm.resetFields()

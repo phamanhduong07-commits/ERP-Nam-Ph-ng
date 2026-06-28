@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.limiter import limiter
-from app.socket_manager import socket_app
+from app.socket_manager import socket_app, sio
 from app.config import settings
 from app.database import Base, engine, ensure_schema
 from app.routers import (
@@ -356,6 +356,40 @@ async def log_requests(request: Request, call_next):
                 request.method, request.url.path, response.status_code, duration_ms,
             )
     return response
+
+
+# ─── Broadcast mutations qua Socket.io ────────────────────────────────────────
+_SKIP_BROADCAST = ("/api/auth/", "/api/gps/", "/api/agent/", "/assets/", "/uploads/")
+
+@app.middleware("http")
+async def broadcast_mutations(request: Request, call_next):
+    response = await call_next(request)
+
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return response
+    if response.status_code >= 400:
+        return response
+
+    path = request.url.path
+    if not path.startswith("/api/"):
+        return response
+    if path.startswith(_SKIP_BROADCAST):
+        return response
+
+    segments = path.split("/")
+    if len(segments) < 3 or not segments[2]:
+        return response
+    resource = segments[2]
+
+    async def safe_emit():
+        try:
+            await sio.emit("data_changed", {"resource": resource, "method": request.method})
+        except Exception:
+            logging.getLogger("erp").warning("broadcast_mutations emit failed", exc_info=True)
+
+    asyncio.create_task(safe_emit())
+    return response
+
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router)

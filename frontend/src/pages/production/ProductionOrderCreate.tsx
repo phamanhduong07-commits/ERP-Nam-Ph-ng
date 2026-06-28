@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Card, Form, Select, DatePicker, Input, Button, Table, Space,
-  InputNumber, Typography, Row, Col, Divider, message, Alert, Tag,
+  InputNumber, Typography, Row, Col, Divider, message, Alert, Tag, Checkbox,
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -186,6 +186,7 @@ export default function ProductionOrderCreate() {
           ? dayjs(values.ngay_hoan_thanh_ke_hoach).format('YYYY-MM-DD')
           : undefined,
         ghi_chu: values.ghi_chu,
+        in_2_lan: values.in_2_lan ?? false,
         don_gia_noi_bo: values.don_gia_noi_bo ?? null,
         parent_production_order_id: values.parent_production_order_id ?? null,
         items: lines.map((l) => ({
@@ -417,6 +418,11 @@ export default function ProductionOrderCreate() {
                 <Col span={16}>
                   <Form.Item name="ghi_chu" label="Ghi chú">
                     <Input.TextArea rows={2} placeholder="Ghi chú lệnh SX..." />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="in_2_lan" valuePropName="checked" label=" ">
+                    <Checkbox>In 2 lần (quét mã 2 lần)</Checkbox>
                   </Form.Item>
                 </Col>
               </Row>

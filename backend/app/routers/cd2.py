@@ -226,6 +226,7 @@ def _to_dict(p: PhieuIn) -> dict:
         "so_con_thuc_te": p.so_con_thuc_te,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "so_lsx": p.production_order.so_lenh if p.production_order else None,
+        "in_2_lan": p.production_order.in_2_lan if p.production_order else False,
         # Thông tin kỹ thuật từ ProductionOrderItem (item đầu tiên của LSX)
         **_poi_fields(p.production_order),
     }
@@ -788,19 +789,49 @@ def create_from_lenh_sx(
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh SX")
 
     # Chặn trùng: LSX đã có phiếu in đang active
-    existing = (
-        db.query(PhieuIn)
-        .filter(
-            PhieuIn.production_order_id == order_id,
-            PhieuIn.trang_thai.notin_(["huy", "hoan_thanh"]),
+    if order.in_2_lan:
+        # LSX in 2 lần: cho phép PhieuIn 2 khi lần in trước đã xong in (không còn ở printing states)
+        printing_active = (
+            db.query(PhieuIn)
+            .filter(
+                PhieuIn.production_order_id == order_id,
+                PhieuIn.trang_thai.in_(["cho_in", "ke_hoach", "dang_in"]),
+            )
+            .first()
         )
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"LSX đã có phiếu in {existing.so_phieu} (trạng thái: {existing.trang_thai})",
+        if printing_active:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Phiếu in lần trước ({printing_active.so_phieu}) chưa hoàn thành in",
+            )
+        from sqlalchemy import func as sqlfunc
+        active_count = (
+            db.query(sqlfunc.count(PhieuIn.id))
+            .filter(
+                PhieuIn.production_order_id == order_id,
+                PhieuIn.trang_thai.notin_(["huy", "hoan_thanh"]),
+            )
+            .scalar()
         )
+        if active_count >= 2:
+            raise HTTPException(
+                status_code=409,
+                detail="LSX in 2 lần đã có đủ 2 phiếu in đang xử lý",
+            )
+    else:
+        existing = (
+            db.query(PhieuIn)
+            .filter(
+                PhieuIn.production_order_id == order_id,
+                PhieuIn.trang_thai.notin_(["huy", "hoan_thanh"]),
+            )
+            .first()
+        )
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"LSX đã có phiếu in {existing.so_phieu} (trạng thái: {existing.trang_thai})",
+            )
 
     # Lấy phiếu nhập phôi + items (để tính số lượng và warehouse_id)
     phieus_nhap = (
