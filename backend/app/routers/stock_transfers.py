@@ -22,6 +22,7 @@ from app.models.warehouse_doc import (
     PhieuChuyenKho, PhieuChuyenKhoItem, ProductionOutput,
 )
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
+from app.models.inventory import InventoryTransaction
 from app.models.cd2 import PhieuIn
 from app.services.accounting_service import AccountingService
 from app.utils.log import get_logger
@@ -53,6 +54,35 @@ from app.routers.warehouse import (  # shared schemas + helpers
     _ensure_active_warehouse,
 )
 from app.routers.production_orders import _generate_so_lenh as _gen_so_lenh_po
+
+def _calc_phoi_ton_tai_nguon(db: Session, production_order_id: int) -> Decimal:
+    """Tồn phôi thực tế: nhập - chuyển đi - tận dụng - bán phế."""
+    tong_nhap = db.query(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0)).join(
+        PhieuNhapPhoiSong, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id
+    ).filter(PhieuNhapPhoiSong.production_order_id == production_order_id).scalar() or Decimal("0")
+    tong_chuyen = db.query(func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0)).join(
+        PhieuChuyenKho, PhieuChuyenKhoItem.phieu_chuyen_kho_id == PhieuChuyenKho.id
+    ).filter(
+        PhieuChuyenKhoItem.production_order_id == production_order_id,
+        PhieuChuyenKho.trang_thai == "da_duyet"
+    ).scalar() or Decimal("0")
+    tong_tan_dung = db.query(func.coalesce(func.sum(InventoryTransaction.so_luong), 0)).join(
+        PhieuNhapPhoiSong,
+        (InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song") &
+        (InventoryTransaction.chung_tu_id == PhieuNhapPhoiSong.id) &
+        (InventoryTransaction.loai_giao_dich == "NHAP_PHOI_DU")
+    ).filter(PhieuNhapPhoiSong.production_order_id == production_order_id).scalar() or Decimal("0")
+    tong_ban_phe = db.query(func.coalesce(func.sum(InventoryTransaction.so_luong), 0)).join(
+        PhieuNhapPhoiSong,
+        (InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song") &
+        (InventoryTransaction.chung_tu_id == PhieuNhapPhoiSong.id) &
+        (InventoryTransaction.loai_giao_dich == "NHAP_PHOI_LOI")
+    ).filter(PhieuNhapPhoiSong.production_order_id == production_order_id).scalar() or Decimal("0")
+    return max(
+        Decimal("0"),
+        Decimal(str(tong_nhap)) - Decimal(str(tong_chuyen)) - Decimal(str(tong_tan_dung)) - Decimal(str(tong_ban_phe))
+    )
+
 
 router = APIRouter(
     prefix="/api/warehouse",
@@ -249,16 +279,7 @@ def create_phieu_chuyen(
                 raise HTTPException(400, f"Không đủ tồn BTP tại kho xuất: {ten} — "
                                     f"cần {float(it.so_luong):g}, còn {float(bal.ton_luong):g}")
         elif is_phoi:
-            tong_nhap = db.query(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0)).join(
-                PhieuNhapPhoiSong, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id
-            ).filter(PhieuNhapPhoiSong.production_order_id == it.production_order_id).scalar() or Decimal("0")
-            tong_chuyen = db.query(func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0)).join(
-                PhieuChuyenKho, PhieuChuyenKhoItem.phieu_chuyen_kho_id == PhieuChuyenKho.id
-            ).filter(
-                PhieuChuyenKhoItem.production_order_id == it.production_order_id,
-                PhieuChuyenKho.trang_thai == "da_duyet"
-            ).scalar() or Decimal("0")
-            ton_tai_nguon = max(Decimal("0"), Decimal(str(tong_nhap)) - Decimal(str(tong_chuyen)))
+            ton_tai_nguon = _calc_phoi_ton_tai_nguon(db, it.production_order_id)
             if ton_tai_nguon < it.so_luong:
                 raise HTTPException(400, f"Không đủ phôi tại kho nguồn: LSX #{it.production_order_id} — "
                                     f"cần {float(it.so_luong):g}, còn {float(ton_tai_nguon):g}")
@@ -436,16 +457,7 @@ def approve_phieu_chuyen(
                 raise HTTPException(400, f"Không đủ tồn BTP tại kho xuất: {it.ten_hang} — "
                                     f"cần {float(it.so_luong):g}, còn {float(bal_xuat.ton_luong):g}")
         elif is_phoi:
-            tong_nhap = db.query(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0)).join(
-                PhieuNhapPhoiSong, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id
-            ).filter(PhieuNhapPhoiSong.production_order_id == it.production_order_id).scalar() or Decimal("0")
-            tong_chuyen = db.query(func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0)).join(
-                PhieuChuyenKho, PhieuChuyenKhoItem.phieu_chuyen_kho_id == PhieuChuyenKho.id
-            ).filter(
-                PhieuChuyenKhoItem.production_order_id == it.production_order_id,
-                PhieuChuyenKho.trang_thai == "da_duyet"
-            ).scalar() or Decimal("0")
-            ton_tai_nguon = max(Decimal("0"), Decimal(str(tong_nhap)) - Decimal(str(tong_chuyen)))
+            ton_tai_nguon = _calc_phoi_ton_tai_nguon(db, it.production_order_id)
             if ton_tai_nguon < it.so_luong:
                 raise HTTPException(400, f"Không đủ phôi tại kho nguồn: LSX #{it.production_order_id} — "
                                     f"cần {float(it.so_luong):g}, còn {float(ton_tai_nguon):g}")

@@ -801,7 +801,7 @@ def ton_kho_lsx(
             "tong_tra_khach": tra_khach,
             "tong_chuyen_phoi": data["chuyen_di"],
             "ton_kho": ton_kho,
-            "ton_kho_tai_nguon": max(0.0, round(data["nhap"] + tra_khach - data["chuyen_di"], 3)),
+            "ton_kho_tai_nguon": max(0.0, round(data["nhap"] + tra_khach - data["chuyen_di"] - tan_dung - ban_phe, 3)),
             "ton_kho_tai_cd2": max(0.0, round(data["chuyen_den"] - data["xuat"], 3)),
             "co_in": co_in,
             "don_gia_noi_bo": _don_gia,
