@@ -7,7 +7,7 @@ from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlanLine, ProductionPlan
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.sales import SalesOrder, SalesOrderItem
-from app.models.master import Product, Customer, PhanXuong
+from app.models.master import Product, Customer, PhanXuong, Warehouse
 from app.schemas.master import ProductShort
 from app.schemas.production import (
     ProductionOrderCreate, ProductionOrderUpdate,
@@ -425,14 +425,20 @@ class ProductionOrderService:
             )
             self.db.add(item)
 
-        # Auto-populate don_gia_noi_bo from QuoteItem.gia_phoi if not explicitly set
+        # Auto-populate don_gia_noi_bo from QuoteItem based on warehouse type:
+        # kho PHOI → gia_phoi (a+b+e), kho TP → gia_noi_bo (a+b+c+d+e)
         if not order.don_gia_noi_bo:
+            wh = self.db.get(Warehouse, order.kho_sx_id) if order.kho_sx_id else None
+            use_tp = wh and wh.loai_kho and wh.loai_kho.upper() == "TP"
             for item_data in data.items:
                 if item_data.sales_order_item_id:
                     soi = self.db.get(SalesOrderItem, item_data.sales_order_item_id)
-                    if soi and soi.quote_item and soi.quote_item.gia_phoi and soi.quote_item.gia_phoi > 0:
-                        order.don_gia_noi_bo = soi.quote_item.gia_phoi
-                        break
+                    if soi and soi.quote_item:
+                        qi = soi.quote_item
+                        price = qi.gia_noi_bo if use_tp else qi.gia_phoi
+                        if price and price > 0:
+                            order.don_gia_noi_bo = price
+                            break
 
         # Cập nhật trạng thái đơn hàng → dang_sx
         if data.sales_order_id:
