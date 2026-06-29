@@ -207,6 +207,7 @@ export interface ScanLog {
   so_phoi_thuc_te?: number | null
   so_con_thuc_te?: number | null
   so_luong_loi?: number | null
+  ghi_chu?: string | null
   gio_bat_dau?: string | null
   gio_ket_thuc?: string | null
   created_at: string
@@ -375,6 +376,8 @@ export const cd2Api = {
     gio_ket_thuc?: string
   }) => client.post<ScanLog>('/cd2/scan-logs/submit', data),
   deleteScanLog: (id: number) => client.delete(`/cd2/scan-logs/delete/${id}`),
+  updateScanLog: (id: number, data: { so_luong_tp?: number; ghi_chu?: string }) =>
+    client.put<ScanLog>(`/cd2/scan-logs/${id}`, data),
   // Tra cứu theo Số lệnh (Production Order) - Dành cho trang Scan Máy
   scanLookup: (code: string, mayScanId?: number) =>
     client.get<ScanLookupResult>(`/cd2/scan/lookup/${code}`, { params: mayScanId ? { may_scan_id: mayScanId } : undefined }),

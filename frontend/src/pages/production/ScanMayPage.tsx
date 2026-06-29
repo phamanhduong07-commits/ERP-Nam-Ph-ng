@@ -3,13 +3,13 @@ import type { ApiError } from '../../api/types'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
-  Button, Card, Col, Drawer, Form, Input, InputNumber, message,
+  Button, Card, Col, Drawer, Form, Input, InputNumber, message, Modal,
   Popconfirm, Row, Space, Spin, Tag, Typography, Empty, Badge, Divider,
 } from 'antd'
 import type { InputRef } from 'antd'
 import type { InputNumberRef } from 'rc-input-number'
 import {
-  BarcodeOutlined, CameraOutlined, CheckCircleFilled, DeleteOutlined,
+  BarcodeOutlined, CameraOutlined, CheckCircleFilled, DeleteOutlined, EditOutlined,
   LogoutOutlined, ArrowLeftOutlined, SettingOutlined, HistoryOutlined,
   InfoCircleOutlined,
 } from '@ant-design/icons'
@@ -54,6 +54,9 @@ export default function ScanMayPage() {
   const [gioBatDau, setGioBatDau] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
+  const [editingLog, setEditingLog] = useState<ScanLog | null>(null)
+  const [editQty, setEditQty] = useState<number | null>(null)
+  const [editGhiChu, setEditGhiChu] = useState('')
   const [clockTime, setClockTime] = useState(dayjs().format('HH:mm'))
   const lsxRef = useRef<InputRef>(null)
   const slRef = useRef<InputNumberRef>(null)
@@ -127,6 +130,18 @@ export default function ScanMayPage() {
       message.success('Đã xoá')
       qc.invalidateQueries({ queryKey: ['scan-history', selectedMachine] })
     },
+  })
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, so_luong_tp, ghi_chu }: { id: number; so_luong_tp?: number; ghi_chu?: string }) =>
+      cd2Api.updateScanLog(id, { so_luong_tp, ghi_chu }),
+    onSuccess: () => {
+      message.success('Đã cập nhật')
+      setEditingLog(null)
+      qc.invalidateQueries({ queryKey: ['scan-history', selectedMachine] })
+    },
+    onError: (e: { response?: { data?: { detail?: string } } }) =>
+      message.error((e as ApiError)?.response?.data?.detail || 'Cập nhật thất bại'),
   })
 
   // Socket: nhận cập nhật real-time khi máy scan khác nộp sản lượng
@@ -634,6 +649,15 @@ export default function ScanMayPage() {
                       )}
                     </div>
                   </div>
+                  <Button
+                    size="small" type="text" icon={<EditOutlined />}
+                    style={{ flexShrink: 0, color: '#1677ff' }}
+                    onClick={() => {
+                      setEditingLog(log)
+                      setEditQty(log.so_luong_tp)
+                      setEditGhiChu(log.ghi_chu ?? '')
+                    }}
+                  />
                   <Popconfirm
                     title="Xoá bản ghi này?"
                     onConfirm={() => deleteMutation.mutate(log.id)}
@@ -664,6 +688,47 @@ export default function ScanMayPage() {
           onSaved={() => { setShowSettings(false); qc.invalidateQueries({ queryKey: ['may-scan'] }) }}
         />
       )}
+
+      <Modal
+        title="Chỉnh sửa sản lượng"
+        open={!!editingLog}
+        onCancel={() => setEditingLog(null)}
+        onOk={() => {
+          if (!editingLog || editQty == null || editQty <= 0) return
+          editMutation.mutate({ id: editingLog.id, so_luong_tp: editQty, ghi_chu: editGhiChu || undefined })
+        }}
+        okText="Lưu" cancelText="Huỷ"
+        confirmLoading={editMutation.isPending}
+        centered
+      >
+        {editingLog && (
+          <div style={{ paddingTop: 8 }}>
+            <div style={{ marginBottom: 12, color: '#555', fontSize: 13 }}>
+              <strong>{editingLog.so_lsx}</strong>
+              {editingLog.ten_hang && <span style={{ marginLeft: 8, color: '#888' }}>{editingLog.ten_hang}</span>}
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 4, fontWeight: 500 }}>Số lượng TP</div>
+              <InputNumber
+                value={editQty}
+                onChange={v => setEditQty(v)}
+                min={1}
+                style={{ width: '100%' }}
+                size="large"
+                autoFocus
+              />
+            </div>
+            <div>
+              <div style={{ marginBottom: 4, fontWeight: 500 }}>Ghi chú</div>
+              <Input
+                value={editGhiChu}
+                onChange={e => setEditGhiChu(e.target.value)}
+                placeholder="Tuỳ chọn"
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <QrScannerModal
         open={isScannerOpen}

@@ -2011,6 +2011,63 @@ def delete_scan_log(log_id: int, db: Session = Depends(get_db), _: User = Depend
     return {"ok": True}
 
 
+class ScanLogUpdate(BaseModel):
+    so_luong_tp: Optional[Decimal] = Field(default=None, gt=0)
+    ghi_chu: Optional[str] = None
+
+
+@router.put("/scan-logs/{log_id}")
+def update_scan_log(
+    log_id: int,
+    data: ScanLogUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    s = db.query(ScanLog).options(joinedload(ScanLog.may_scan_obj)).filter(ScanLog.id == log_id).first()
+    if not s:
+        raise HTTPException(404, "Không tìm thấy bản ghi")
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if s.created_by != current_user.id and role_code != "ADMIN":
+        raise HTTPException(403, "Không có quyền sửa bản ghi này")
+
+    if data.so_luong_tp is not None:
+        new_qty = Decimal(str(data.so_luong_tp))
+        if new_qty != s.so_luong_tp:
+            order = (
+                db.query(ProductionOrder)
+                .options(joinedload(ProductionOrder.items))
+                .filter(ProductionOrder.so_lenh == s.so_lsx)
+                .first()
+            )
+            if order and order.items and order.items[0].so_luong_ke_hoach is not None:
+                ke_hoach = Decimal(str(order.items[0].so_luong_ke_hoach))
+                da_scan = db.query(func.coalesce(func.sum(ScanLog.so_luong_tp), 0)).filter(
+                    ScanLog.so_lsx == s.so_lsx,
+                    ScanLog.may_scan_id == s.may_scan_id,
+                    ScanLog.id != log_id,
+                ).scalar()
+                da_scan = Decimal(str(da_scan))
+                if da_scan + new_qty > ke_hoach * SL_MAX_RATIO:
+                    con_lai = max(Decimal("0"), ke_hoach * SL_MAX_RATIO - da_scan)
+                    raise HTTPException(
+                        400,
+                        f"Vượt giới hạn 110%: đã scan {float(da_scan):,.0f} / {float(ke_hoach):,.0f} kế hoạch. Còn có thể nhập: {float(con_lai):,.0f}",
+                    )
+            if s.so_luong_tp and s.so_luong_tp > 0 and s.dien_tich is not None:
+                dt_per_unit = Decimal(str(s.dien_tich)) / Decimal(str(s.so_luong_tp))
+                s.dien_tich = dt_per_unit * new_qty
+                if s.don_gia is not None:
+                    s.tien_luong = s.dien_tich * Decimal(str(s.don_gia))
+            s.so_luong_tp = new_qty
+
+    if data.ghi_chu is not None:
+        s.ghi_chu = data.ghi_chu
+
+    db.commit()
+    s = db.query(ScanLog).options(joinedload(ScanLog.may_scan_obj)).filter(ScanLog.id == log_id).first()
+    return _scan_log_to_dict(s)
+
+
 # ── Nhập kho TP qua quét mã (song song với luồng in) ──────────────────────────
 
 class NhapKhoTPScanBody(BaseModel):
