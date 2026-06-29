@@ -86,6 +86,7 @@ def _generate_so_phieu(db: Session) -> str:
         db.query(PhieuTraHang)
         .filter(PhieuTraHang.so_phieu.like(f"{prefix}%"))
         .order_by(PhieuTraHang.so_phieu.desc())
+        .with_for_update()
         .first()
     )
     seq = (int(last.so_phieu[-3:]) + 1) if last else 1

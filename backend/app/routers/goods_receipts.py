@@ -841,7 +841,7 @@ def _gen_so_bt_gr(db: Session) -> str:
 
 @router.patch("/goods-receipts/{gr_id}/approve")
 def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO_TO_TRUONG", "BGD_GIAM_DOC", "ADMIN"))):
-    gr = db.get(GoodsReceipt, gr_id)
+    gr = db.query(GoodsReceipt).filter(GoodsReceipt.id == gr_id).with_for_update().first()
     if not gr:
         logger.warning("goods_receipt id=%s not found", gr_id)
         raise HTTPException(404, "Không tìm thấy phiếu nhập")

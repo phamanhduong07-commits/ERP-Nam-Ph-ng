@@ -135,7 +135,7 @@ export default function CashPaymentForm() {
       const soTkNo = tkNgamDinhMap[typeConfig.maLoaiTkNo]
       if (soTkNo) form.setFieldValue('tk_no', soTkNo)
     }
-  }, [tkNgamDinhList]) // eslint-disable-line
+  }, [tkNgamDinhList, hinhThucParam, typeConfig, isEdit])
 
   // Pre-populate form when editing
   useEffect(() => {

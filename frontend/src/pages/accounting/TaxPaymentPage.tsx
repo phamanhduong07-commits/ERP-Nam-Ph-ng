@@ -138,8 +138,9 @@ export default function TaxPaymentPage() {
       message.success(`Tạo thành công ${res.thanh_cong} phiếu chi`)
       queryClient.invalidateQueries({ queryKey: ['tax-obligations'] })
     },
-    onError: () => {
-      message.error('Tạo phiếu chi thất bại')
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(detail || 'Tạo phiếu chi thất bại')
     },
   })
 

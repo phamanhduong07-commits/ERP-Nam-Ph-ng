@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Row, Select, Space, Typography, message, Table, Divider, Dropdown, MenuProps
@@ -24,6 +24,7 @@ const { Title, Text } = Typography
 
 export default function JournalEntryForm() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [form] = Form.useForm()
   const [totalNo, setTotalNo] = useState(0)
   const [totalCo, setTotalCo] = useState(0)
@@ -50,6 +51,7 @@ export default function JournalEntryForm() {
   const createMut = useMutation({
     mutationFn: (data: JournalEntryCreate) => journalApi.create(data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal-entries'] })
       message.success('Tạo bút toán thành công')
       navigate('/accounting/journal-entries')
     },

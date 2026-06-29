@@ -2047,13 +2047,17 @@ def nhap_kho_tp_scan(
 
     ym = date.today().strftime("%Y%m")
     pattern = f"TP-{ym}-%"
-    last_so = db.query(func.max(ProductionOutput.so_phieu)).filter(
-        ProductionOutput.so_phieu.like(pattern)
-    ).scalar()
+    _last_tp = (
+        db.query(ProductionOutput)
+        .filter(ProductionOutput.so_phieu.like(pattern))
+        .order_by(desc(ProductionOutput.so_phieu))
+        .with_for_update()
+        .first()
+    )
     seq = 1
-    if last_so:
+    if _last_tp:
         try:
-            seq = int(last_so.rsplit("-", 1)[-1]) + 1
+            seq = int(_last_tp.so_phieu.rsplit("-", 1)[-1]) + 1
         except (ValueError, IndexError):
             seq = 1
 

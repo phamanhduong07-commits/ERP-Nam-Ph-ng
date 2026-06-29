@@ -130,6 +130,7 @@ def _gen_so_phieu(db: Session) -> str:
         db.query(PhieuXuatCCDC)
         .filter(PhieuXuatCCDC.so_phieu.like(f"{prefix}%"))
         .order_by(desc(PhieuXuatCCDC.so_phieu))
+        .with_for_update()
         .first()
     )
     seq = int(last.so_phieu[-4:]) + 1 if last else 1

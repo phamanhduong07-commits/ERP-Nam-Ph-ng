@@ -863,6 +863,7 @@ def _generate_so_phieu(db: Session) -> str:
         db.query(PhieuNhapPhoiSong)
         .filter(PhieuNhapPhoiSong.so_phieu.like(f"{prefix}%"))
         .order_by(PhieuNhapPhoiSong.so_phieu.desc())
+        .with_for_update()
         .first()
     )
     seq = (int(last.so_phieu[-4:]) + 1) if last else 1

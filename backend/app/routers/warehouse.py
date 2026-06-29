@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from openpyxl import Workbook
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_, text as _text
+from sqlalchemy import and_, desc, func, or_, text as _text
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 from app.database import get_db
 from app.deps import get_current_user, require_permissions, require_roles
@@ -255,13 +255,17 @@ from app.services.inventory_service import (
 def _gen_so(db: Session, prefix: str, model_cls) -> str:
     ymd = datetime.today().strftime("%Y%m%d")
     pattern = f"{prefix}-{ymd}-%"
-    last = db.query(func.max(model_cls.so_phieu)).filter(
-        model_cls.so_phieu.like(pattern)
-    ).scalar()
+    last_row = (
+        db.query(model_cls)
+        .filter(model_cls.so_phieu.like(pattern))
+        .order_by(desc(model_cls.so_phieu))
+        .with_for_update()
+        .first()
+    )
     seq = 1
-    if last:
+    if last_row:
         try:
-            seq = int(last.rsplit("-", 1)[-1]) + 1
+            seq = int(last_row.so_phieu.rsplit("-", 1)[-1]) + 1
         except (ValueError, IndexError):
             seq = 1
     return f"{prefix}-{ymd}-{seq:03d}"

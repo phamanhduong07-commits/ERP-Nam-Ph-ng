@@ -300,7 +300,7 @@ def approve_material_issue(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN")),
 ):
-    mi = db.get(MaterialIssue, mi_id)
+    mi = db.query(MaterialIssue).filter(MaterialIssue.id == mi_id).with_for_update().first()
     if not mi:
         logger.warning("material_issue id=%s not found", mi_id)
         raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
@@ -371,7 +371,7 @@ def cancel_material_issue(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN")),
 ):
-    mi = db.get(MaterialIssue, mi_id)
+    mi = db.query(MaterialIssue).filter(MaterialIssue.id == mi_id).with_for_update().first()
     if not mi:
         raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
     if mi.trang_thai == "nhap":

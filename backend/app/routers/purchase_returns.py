@@ -74,13 +74,17 @@ def _gen_so_phieu(db: Session, loai: str) -> str:
     prefix = "PTH" if loai == "tra_hang" else "PGG"
     ym = datetime.today().strftime("%Y%m")
     pattern = f"{prefix}-{ym}-%"
-    last = db.query(func.max(PurchaseReturn.so_phieu)).filter(
-        PurchaseReturn.so_phieu.like(pattern)
-    ).scalar()
+    last_row = (
+        db.query(PurchaseReturn)
+        .filter(PurchaseReturn.so_phieu.like(pattern))
+        .order_by(desc(PurchaseReturn.so_phieu))
+        .with_for_update()
+        .first()
+    )
     seq = 1
-    if last:
+    if last_row:
         try:
-            seq = int(last.rsplit("-", 1)[-1]) + 1
+            seq = int(last_row.so_phieu.rsplit("-", 1)[-1]) + 1
         except (ValueError, IndexError):
             seq = 1
     return f"{prefix}-{ym}-{seq:04d}"

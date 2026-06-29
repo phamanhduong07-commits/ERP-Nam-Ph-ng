@@ -299,7 +299,7 @@ def approve_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions("sales_order.approve")),
 ):
-    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).with_for_update().first()
     if not order:
         logger.warning("sales_order id=%s not found", order_id)
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
@@ -320,7 +320,7 @@ def unapprove_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions("sales_order.approve")),
 ):
-    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     if order.trang_thai != "da_duyet":

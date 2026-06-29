@@ -782,7 +782,7 @@ def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Dep
     role_code = current_user.role.ma_vai_tro if current_user.role else None
     if role_code not in ("BGD_GIAM_DOC", "ADMIN"):
         raise HTTPException(403, "Không có quyền duyệt đơn mua hàng")
-    po = db.get(PurchaseOrder, po_id)
+    po = db.query(PurchaseOrder).filter(PurchaseOrder.id == po_id).with_for_update().first()
     if not po:
         logger.warning("purchase_order id=%s not found", po_id)
         raise HTTPException(404, "Không tìm thấy PO")
@@ -798,7 +798,7 @@ def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Dep
 
 @router.post("/{po_id:int}/gui-ncc")
 def gui_ncc_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    po = db.get(PurchaseOrder, po_id)
+    po = db.query(PurchaseOrder).filter(PurchaseOrder.id == po_id).with_for_update().first()
     if not po:
         raise HTTPException(404, "Không tìm thấy PO")
     if po.trang_thai != "da_duyet":
@@ -810,7 +810,7 @@ def gui_ncc_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_
 
 @router.post("/{po_id:int}/huy")
 def huy_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    po = db.get(PurchaseOrder, po_id)
+    po = db.query(PurchaseOrder).filter(PurchaseOrder.id == po_id).with_for_update().first()
     if not po:
         raise HTTPException(404, "Không tìm thấy PO")
     if po.trang_thai == "huy":

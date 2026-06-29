@@ -19,6 +19,7 @@ def _gen_so_phieu(db: Session) -> str:
     last = (db.query(QCSheet)
               .filter(QCSheet.so_phieu.like(f"{prefix}%"))
               .order_by(QCSheet.id.desc())
+              .with_for_update()
               .first())
     seq = int(last.so_phieu.split("-")[-1]) + 1 if last else 1
     return f"{prefix}{seq:03d}"

@@ -46,6 +46,7 @@ def _generate_so_phieu_xuat(db: Session) -> str:
         db.query(PhieuXuatPhoi)
         .filter(PhieuXuatPhoi.so_phieu.like(f"{prefix}%"))
         .order_by(PhieuXuatPhoi.so_phieu.desc())
+        .with_for_update()
         .first()
     )
     seq = (int(last.so_phieu[-4:]) + 1) if last else 1
@@ -127,6 +128,25 @@ def _xuat_phieu_to_dict(p: PhieuXuatPhoi) -> dict:
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
+
+class NhapItemUpdate(BaseModel):
+    id: int
+    so_luong_thuc_te: Decimal | None = None
+    so_luong_loi: Decimal | None = None
+    chieu_kho: Decimal | None = None
+    chieu_cat: Decimal | None = None
+    so_tam: int | None = None
+    ghi_chu: str | None = None
+
+
+class NhapUpdate(BaseModel):
+    ngay: date | None = None
+    ca: str | None = None
+    gio_bat_dau: str | None = None
+    gio_ket_thuc: str | None = None
+    ghi_chu: str | None = None
+    items: list[NhapItemUpdate] | None = None
+
 
 class XuatItemBody(BaseModel):
     production_order_item_id: int | None = None
@@ -211,6 +231,59 @@ def get_phieu_nhap(
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu nhập")
     return _nhap_phieu_to_dict(p)
+
+
+@router.patch("/nhap/{phieu_id}")
+def update_phieu_nhap(
+    phieu_id: int,
+    data: NhapUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_any_permission("production_order.edit", "production_order.complete")),
+):
+    """Cập nhật phiếu nhập phôi sóng (header + items)."""
+    p = (
+        db.query(PhieuNhapPhoiSong)
+        .options(joinedload(PhieuNhapPhoiSong.items))
+        .filter(PhieuNhapPhoiSong.id == phieu_id)
+        .first()
+    )
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu nhập")
+
+    if data.ngay is not None:
+        p.ngay = data.ngay
+    if data.ca is not None:
+        p.ca = data.ca
+    if data.gio_bat_dau is not None:
+        p.gio_bat_dau = data.gio_bat_dau
+    if data.gio_ket_thuc is not None:
+        p.gio_ket_thuc = data.gio_ket_thuc
+    if data.ghi_chu is not None:
+        p.ghi_chu = data.ghi_chu
+
+    if data.items:
+        item_map = {it.id: it for it in p.items}
+        for upd in data.items:
+            it = item_map.get(upd.id)
+            if not it:
+                continue
+            if upd.so_luong_thuc_te is not None:
+                it.so_luong_thuc_te = upd.so_luong_thuc_te
+            if upd.so_luong_loi is not None:
+                it.so_luong_loi = upd.so_luong_loi
+                it.trang_thai_loi = 'da_nhap_kho_ao' if upd.so_luong_loi > 0 else None
+            if upd.chieu_kho is not None:
+                it.chieu_kho = upd.chieu_kho
+            if upd.chieu_cat is not None:
+                it.chieu_cat = upd.chieu_cat
+            if upd.so_tam is not None:
+                it.so_tam = upd.so_tam
+            if upd.ghi_chu is not None:
+                it.ghi_chu = upd.ghi_chu
+
+    db.commit()
+    db.refresh(p)
+    return _nhap_phieu_to_dict(p, db)
 
 
 # ── Endpoints: Phiếu xuất ─────────────────────────────────────────────────────
