@@ -1232,6 +1232,7 @@ def list_all_phieu_nhap_phoi_song(
             joinedload(PhieuNhapPhoiSong.production_order),
             joinedload(PhieuNhapPhoiSong.warehouse),
             joinedload(PhieuNhapPhoiSong.creator),
+            joinedload(PhieuNhapPhoiSong.session),
         )
     )
     if tu_ngay:
@@ -1261,6 +1262,7 @@ def list_all_phieu_nhap_phoi_song(
         base["tong_so_tam"] = sum(it.get("so_tam") or 0 for it in items)
         base["tong_so_luong_thuc_te"] = sum(it.get("so_luong_thuc_te") or 0 for it in items)
         base["tong_so_luong_loi"] = sum(it.get("so_luong_loi") or 0 for it in items)
+        base["session_ten_phien"] = p.session.ten_phien if p.session else None
         result.append(base)
     return result
 

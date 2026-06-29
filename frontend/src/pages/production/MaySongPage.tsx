@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Col, DatePicker, Divider, Form, Input, InputNumber,
@@ -22,6 +22,7 @@ import { warehouseApi } from '../../api/warehouse'
 import { calcBoxDimensions } from '../../api/quotes'
 import { printProductionTagBatch, exportExcelWithTemplate, printPhoiDuTag } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useAuthStore } from '../../store/auth'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
@@ -914,8 +915,10 @@ export default function MaySongPage() {
   const [editPhieuForm] = Form.useForm()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [newSessionName, setNewSessionName] = useState('')
-  const [histFilterCa, setHistFilterCa]   = useState<string | undefined>()
-  const [histSearchLenh, setHistSearchLenh] = useState('')
+  const [histFilterCa, setHistFilterCa]         = useState<string | undefined>()
+  const [histSearchLenh, setHistSearchLenh]     = useState('')
+  const [histFilterSessionId, setHistFilterSessionId] = useState<number | undefined>()
+  const [histFilterKhId, setHistFilterKhId]     = useState<number | undefined>()
   const [inTemTabSearch, setInTemTabSearch] = useState('')
   const [inTemTabLoading, setInTemTabLoading] = useState(false)
   const [phoiDuTuNgay, setPhoiDuTuNgay] = useState<string | null>(null)
@@ -936,6 +939,7 @@ export default function MaySongPage() {
   const [xuLyGhiChu, setXuLyGhiChu] = useState<string>('')
   const [xuLySoLuong, setXuLySoLuong] = useState<number>(0)
   const qc = useQueryClient()
+  const user = useAuthStore(state => state.user)
 
   // ─── Queries ───────────────────────────────────────────────────────────────
 
@@ -948,6 +952,17 @@ export default function MaySongPage() {
     () => _allPxList.filter(px => px.cong_doan === 'cd1_cd2'),
     [_allPxList],
   )
+
+  // Auto-fill xưởng một lần khi pxList load xong, dựa trên pháp nhân của user
+  const autoFilledPx = useRef(false)
+  useEffect(() => {
+    if (autoFilledPx.current || !user?.phap_nhan_id || pxList.length === 0) return
+    const matched = pxList.find(px => px.phap_nhan_id === user.phap_nhan_id)
+    if (matched) {
+      setFilterPxId(matched.id)
+      autoFilledPx.current = true
+    }
+  }, [pxList, user?.phap_nhan_id])
 
   const { data: khList = [] } = useQuery({
     queryKey: ['ke-hoach-list'],
@@ -1052,6 +1067,23 @@ export default function MaySongPage() {
     staleTime: 30_000,
   })
 
+  // Options phiên — build từ allPhieu đã tải, không cần API thêm
+  const histSessionOptions = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const p of allPhieu) {
+      if (p.session_id != null && p.session_ten_phien) map.set(p.session_id, p.session_ten_phien)
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ value: id, label: name }))
+  }, [allPhieu])
+
+  const { data: histKhSoLenhData } = useQuery({
+    queryKey: ['hist-kh-so-lenh', histFilterKhId],
+    queryFn: () => productionPlansApi.getSoLenh(histFilterKhId!).then(r => r.data),
+    enabled: histFilterKhId != null,
+    staleTime: 5 * 60_000,
+  })
+  const histKhSoLenhSet = histKhSoLenhData ? new Set(histKhSoLenhData.so_lenh) : null
+
   const { data: inTemSearchRes, isFetching: inTemSearching } = useQuery({
     queryKey: ['in-tem-search', inTemTabSearch],
     queryFn: () =>
@@ -1134,7 +1166,9 @@ export default function MaySongPage() {
     mutationFn: (vars: { orderId: number; data: PhieuNhapPhoiSongPayload }) =>
       productionOrdersApi.createPhieu(vars.orderId, vars.data).then(r => r.data),
     onSuccess: (phieu, vars) => {
-      message.success('Đã lưu phiếu — lệnh SX hoàn thành!')
+      const sessionName = shiftSessionData?.session.ten_phien
+      message.success(sessionName ? `Đã lưu phiếu — gộp vào ${sessionName} ✓` : 'Đã lưu phiếu — lệnh SX hoàn thành!')
+      refetchShiftSession()
       invalidateList()
       if (hoanthanhOrder) {
         const planLine = khDetail?.lines.find(l => l.so_lenh === hoanthanhOrder.so_lenh) ?? null
@@ -1165,6 +1199,7 @@ export default function MaySongPage() {
       const soLenhBu = res.lsx_bu.so_lenh
       const conLai = res.lsx_bu.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
       message.success(`Đã ngưng — lệnh bù ${soLenhBu} (${conLai.toLocaleString()} thùng) đã tạo!`, 5)
+      refetchShiftSession()
       invalidateList()
       setNgungId(null)
     },
@@ -1671,6 +1706,12 @@ export default function MaySongPage() {
     },
     { title: 'Người tạo', dataIndex: 'created_by_name', render: (v: string | null) => v ?? '—' },
     {
+      title: 'Phiên',
+      dataIndex: 'session_ten_phien',
+      width: 140,
+      render: (v: string | null) => v ? <Tag style={{ fontSize: 11 }}>{v}</Tag> : <Text type="secondary">—</Text>,
+    },
+    {
       key: 'actions',
       title: '',
       width: 60,
@@ -1743,6 +1784,16 @@ export default function MaySongPage() {
                 <Row gutter={8} style={{ marginBottom: 8 }} align="middle" wrap>
                   <Col>
                     <Select
+                      placeholder="Tất cả xưởng"
+                      allowClear
+                      style={{ width: 155 }}
+                      value={filterPxId}
+                      onChange={v => setFilterPxId(v)}
+                      options={pxList.map(px => ({ value: px.id, label: px.ten_xuong }))}
+                    />
+                  </Col>
+                  <Col>
+                    <Select
                       placeholder="— Chọn kế hoạch SX —"
                       allowClear
                       showSearch
@@ -1770,16 +1821,6 @@ export default function MaySongPage() {
                       style={{ width: 150 }}
                       value={searchHang}
                       onChange={e => setSearchHang(e.target.value)}
-                    />
-                  </Col>
-                  <Col>
-                    <Select
-                      placeholder="Tất cả xưởng"
-                      allowClear
-                      style={{ width: 155 }}
-                      value={filterPxId}
-                      onChange={v => setFilterPxId(v)}
-                      options={pxList.map(px => ({ value: px.id, label: px.ten_xuong }))}
                     />
                   </Col>
                   <Col>
@@ -1812,6 +1853,9 @@ export default function MaySongPage() {
                           <Tag color={SESSION_STATUS_COLOR[shiftSessionData.session.trang_thai] ?? 'default'}>
                             {SESSION_STATUS_LABEL[shiftSessionData.session.trang_thai] ?? shiftSessionData.session.trang_thai}
                           </Tag>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {shiftSessionData.session.so_phieu} phiếu · {shiftSessionData.session.so_cuon} cuộn
+                          </Text>
                           <Button
                             size="small" type="link" icon={<LinkOutlined />}
                             style={{ padding: 0 }}
@@ -1924,6 +1968,8 @@ export default function MaySongPage() {
             children: (() => {
               const filteredPhieu = allPhieu
                 .filter(p => !histFilterCa || p.ca === histFilterCa)
+                .filter(p => !histFilterSessionId || p.session_id === histFilterSessionId)
+                .filter(p => !histKhSoLenhSet || histKhSoLenhSet.has(p.so_lenh ?? ''))
                 .filter(p => {
                   if (!histSearchLenh) return true
                   const term = histSearchLenh.toLowerCase()
@@ -2011,6 +2057,30 @@ export default function MaySongPage() {
                         value={histFilterCa}
                         onChange={v => setHistFilterCa(v)}
                         options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))}
+                      />
+                    </Col>
+                    <Col>
+                      <Select
+                        placeholder="Tất cả phiên"
+                        allowClear
+                        showSearch
+                        optionFilterProp="label"
+                        style={{ width: 165 }}
+                        value={histFilterSessionId}
+                        onChange={v => setHistFilterSessionId(v)}
+                        options={histSessionOptions}
+                      />
+                    </Col>
+                    <Col>
+                      <Select
+                        placeholder="Tất cả KHSX"
+                        allowClear
+                        showSearch
+                        optionFilterProp="label"
+                        style={{ width: 160 }}
+                        value={histFilterKhId}
+                        onChange={v => setHistFilterKhId(v)}
+                        options={khList.map(k => ({ value: k.id, label: k.so_ke_hoach }))}
                       />
                     </Col>
                     <Col>

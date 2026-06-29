@@ -275,6 +275,7 @@ export interface PhieuNhapPhoiSongListItem extends PhieuNhapPhoiSong {
   tong_so_luong_thuc_te: number
   tong_so_luong_loi: number
   session_id: number | null
+  session_ten_phien: string | null
   phoi_du_trang_thai: string | null
   phoi_du_ghi_chu: string | null
   phoi_du_so_luong: number | null
