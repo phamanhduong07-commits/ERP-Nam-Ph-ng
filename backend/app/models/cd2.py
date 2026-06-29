@@ -155,6 +155,7 @@ class PhieuIn(Base):
     so_luong_setup: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     so_lan_setup: Mapped[int | None] = mapped_column(Integer)
     ghi_chu_ket_qua: Mapped[str | None] = mapped_column(Text)
+    so_luot_in: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     # Kết quả sau in
     ngay_sau_in: Mapped[date | None] = mapped_column(Date)

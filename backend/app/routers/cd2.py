@@ -228,6 +228,7 @@ def _to_dict(p: PhieuIn) -> dict:
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "so_lsx": p.production_order.so_lenh if p.production_order else None,
         "in_2_lan": p.production_order.in_2_lan if p.production_order else False,
+        "so_luot_in": p.so_luot_in if p.so_luot_in is not None else 0,
         # Thông tin kỹ thuật từ ProductionOrderItem (item đầu tiên của LSX)
         **_poi_fields(p.production_order),
     }
@@ -1242,6 +1243,8 @@ async def complete_printing(
         p.so_luong_loi = (p.so_luong_loi or Decimal(0)) + body.so_luong_loi
     # OK = phôi - tổng lỗi (công thức cố định, không thể vượt phôi)
     p.so_luong_in_ok = max(Decimal(0), (p.so_luong_phoi or Decimal(0)) - (p.so_luong_loi or Decimal(0)))
+    # Đếm số lượt in
+    p.so_luot_in = (p.so_luot_in or 0) + 1
     if p.so_luong_in_ok > 0 and p.production_order:
         poi = p.production_order.items[0] if p.production_order.items else None
         so_phoi, so_con = _calc_phoi_con(float(p.so_luong_in_ok), poi)
@@ -1291,6 +1294,8 @@ async def ngung_in_tao_phieu_bu(
     # Lỗi tích lũy qua các lần in
     if body.so_luong_loi is not None:
         p.so_luong_loi = (p.so_luong_loi or Decimal(0)) + body.so_luong_loi
+    # Đếm số lượt in
+    p.so_luot_in = (p.so_luot_in or 0) + 1
     if p.production_order:
         poi = p.production_order.items[0] if p.production_order.items else None
         so_phoi, so_con = _calc_phoi_con(float(body.so_luong_in_ok), poi)
@@ -2662,6 +2667,8 @@ async def track_production(data: TrackPayload, db: Session = Depends(get_db),
                 p.so_luong_loi = (p.so_luong_loi or 0) + (data.quantity_loi or 0)
                 # OK = phôi - tổng lỗi (không bao giờ cộng dồn quantity_ok)
                 p.so_luong_in_ok = max(0, float(p.so_luong_phoi or 0) - float(p.so_luong_loi or 0))
+                # Đếm số lượt in
+                p.so_luot_in = (p.so_luot_in or 0) + 1
                 # Ghi nhận SP lỗi vào kho ảo hàng lỗi CD2
                 if p.so_luong_loi and p.so_luong_loi > 0:
                     _pn_id = None
@@ -3081,9 +3088,15 @@ def get_worker_stats(
         so_lenh = len(phieu_ids)
 
         tong_sl = 0
+        tong_phoi_qua_may = 0
         if phieu_ids:
             phieus = db.query(PhieuIn).filter(PhieuIn.id.in_(phieu_ids)).all()
             tong_sl = sum((p.so_luong_in_ok or p.so_luong_phoi or 0) for p in phieus)
+            # Tổng phôi qua máy = phôi × số lượt in (dùng tính m² lương)
+            tong_phoi_qua_may = sum(
+                float(p.so_luong_phoi or 0) * int(p.so_luot_in or 1)
+                for p in phieus
+            )
 
         # Thời gian làm việc (phút): tổng khoảng bat_dau → hoan_thanh
         gio_lam = 0
@@ -3098,6 +3111,7 @@ def get_worker_stats(
             "date": d.isoformat(),
             "so_lenh": so_lenh,
             "tong_sl": int(tong_sl),
+            "tong_phoi_qua_may": int(tong_phoi_qua_may),
             "gio_lam_viec_phut": round(gio_lam),
         }
 
