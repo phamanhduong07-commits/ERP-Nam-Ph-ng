@@ -85,6 +85,7 @@ def _empty_context() -> dict:
         "ten_khach_hang": None,
         "ly_do_tra": None,
         "ten_may": None,
+        "ten_may_sau_in": None,
     }
 
 
@@ -233,8 +234,8 @@ def _context_sales_return_item(ref_id: int, db: Session) -> dict:
 
 
 def _context_phieu_in(ref_id: int, db: Session) -> dict:
-    """Ngữ cảnh cho SP lỗi CD2: PhieuIn → ProductionOrder → PhanXuong → PhapNhan + MayIn."""
-    from app.models.cd2 import PhieuIn, MayIn
+    """Ngữ cảnh cho SP lỗi CD2: PhieuIn → ProductionOrder → PhanXuong → PhapNhan + MayIn + MaySauIn."""
+    from app.models.cd2 import PhieuIn, MayIn, MaySauIn
 
     pi = db.get(PhieuIn, ref_id)
     if not pi:
@@ -245,6 +246,7 @@ def _context_phieu_in(ref_id: int, db: Session) -> dict:
     pn_id = px.phap_nhan_id if px else (order.phap_nhan_id if order else None)
     pn = db.get(PhapNhan, pn_id) if pn_id else None
     may = db.get(MayIn, pi.may_in_id) if pi.may_in_id else None
+    may_sau = db.get(MaySauIn, pi.may_sau_in_id) if pi.may_sau_in_id else None
 
     ctx = _empty_context()
     ctx.update({
@@ -254,11 +256,15 @@ def _context_phieu_in(ref_id: int, db: Session) -> dict:
         "ca": pi.ca,
         "so_phieu": pi.so_phieu,
         "dvt": "Thùng",
+        "quy_cach": pi.quy_cach,
+        "loai_thung": pi.loai,
         "ten_phan_xuong": px.ten_xuong if px else None,
         "ten_phap_nhan": pn.ten_viet_tat if pn else None,
         "phan_xuong_id": pi.phan_xuong_id,
         "phap_nhan_id": pn_id,
+        "ten_khach_hang": pi.ten_khach_hang,
         "ten_may": may.ten_may if may else None,
+        "ten_may_sau_in": may_sau.ten_may if may_sau else None,
     })
     return ctx
 
@@ -306,6 +312,7 @@ def _to_response(entry: DefectRecord, db: Session) -> dict:
         "ten_khach_hang": ctx["ten_khach_hang"],
         "ly_do_tra": ctx["ly_do_tra"],
         "ten_may": ctx.get("ten_may"),
+        "ten_may_sau_in": ctx.get("ten_may_sau_in"),
         "production_order_id_tan_dung": entry.production_order_id_tan_dung,
         "so_lenh_tan_dung": lsx_td.so_lenh if lsx_td else None,
         "created_at": entry.created_at.isoformat() if entry.created_at else None,

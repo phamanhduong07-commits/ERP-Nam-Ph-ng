@@ -109,6 +109,8 @@ interface DefectRecordTraVeRow {
   phap_nhan_id: number | null
   so_lenh_tan_dung: string | null
   ten_may: string | null
+  ten_may_sau_in: string | null
+  quy_cach: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -1353,7 +1355,12 @@ export default function KhoLoiPage() {
                     render: (v: string | null, r) => (
                       <Space direction="vertical" size={0}>
                         <Text strong style={{ fontSize: 13 }}>{v || '—'}</Text>
-                        {r.ca && <Text type="secondary" style={{ fontSize: 11 }}>Ca {r.ca} · {fmtDate(r.ngay)}</Text>}
+                        {r.quy_cach && <Text type="secondary" style={{ fontSize: 11 }}>{r.quy_cach}</Text>}
+                        {(r.ten_khach_hang || r.ca) && (
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {[r.ten_khach_hang, r.ca ? `Ca ${r.ca}` : null, fmtDate(r.ngay)].filter(Boolean).join(' · ')}
+                          </Text>
+                        )}
                       </Space>
                     ),
                   },
@@ -1366,8 +1373,13 @@ export default function KhoLoiPage() {
                   {
                     title: 'Máy in',
                     dataIndex: 'ten_may',
-                    width: 110,
-                    render: (v: string | null) => v ? <Tag style={{ fontSize: 11 }}>{v}</Tag> : <Text type="secondary">—</Text>,
+                    width: 130,
+                    render: (v: string | null, r) => {
+                      const may = v || r.ten_may_sau_in
+                      if (!may) return <Text type="secondary">—</Text>
+                      const label = !v && r.ten_may_sau_in ? `${may} (xả/CaM)` : may
+                      return <Tag style={{ fontSize: 11 }}>{label}</Tag>
+                    },
                   },
                   {
                     title: 'Xưởng',
