@@ -379,6 +379,30 @@ def create_phieu_chuyen(
                 ghi_chu=it.ghi_chu,
             ))
 
+    # Auto-approve: phôi-only transfers từ KhoPhoiPage không cần duyệt thủ công
+    all_phoi = all(
+        bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id and not it.product_id
+        for it in body.items
+    )
+    if body.auto_approve and all_phoi:
+        db.flush()  # ensure phieu.items are accessible
+        for item_db in phieu.items:
+            if (not item_db.don_gia or item_db.don_gia == Decimal("0")) and item_db.production_order_id:
+                lsx = db.get(ProductionOrder, item_db.production_order_id)
+                if lsx and lsx.don_gia_noi_bo and lsx.don_gia_noi_bo > 0:
+                    item_db.don_gia = lsx.don_gia_noi_bo
+            # Cộng vào InventoryBalance kho đích để cd2.py có thể kiểm tra tồn kho
+            don_gia_nhap = item_db.don_gia or Decimal("0")
+            bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
+                                              ten_hang=item_db.ten_hang, don_vi=item_db.don_vi)
+            _nhap_balance(bal_nhap, item_db.so_luong, don_gia_nhap)
+            _log_tx(db, phieu.warehouse_nhap_id, "CHUYEN_KHO_NHAP",
+                    item_db.so_luong, don_gia_nhap, bal_nhap.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    production_order_id=item_db.production_order_id,
+                    ghi_chu=item_db.ghi_chu)
+        phieu.trang_thai = "da_duyet"
+
     db.commit()
     db.refresh(phieu)
     return _ck_to_dict(phieu, db)
@@ -478,6 +502,16 @@ def approve_phieu_chuyen(
                 lsx = db.get(ProductionOrder, it.production_order_id)
                 if lsx and lsx.don_gia_noi_bo and lsx.don_gia_noi_bo > 0:
                     it.don_gia = lsx.don_gia_noi_bo
+            # Cộng vào InventoryBalance kho đích để cd2.py có thể kiểm tra tồn kho
+            don_gia_nhap = it.don_gia or Decimal("0")
+            bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            _nhap_balance(bal_nhap, it.so_luong, don_gia_nhap)
+            _log_tx(db, phieu.warehouse_nhap_id, "CHUYEN_KHO_NHAP",
+                    it.so_luong, don_gia_nhap, bal_nhap.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    production_order_id=it.production_order_id,
+                    ghi_chu=it.ghi_chu)
         elif is_product:
             bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
                                               product_id=_product_id,
@@ -573,7 +607,8 @@ def approve_phieu_chuyen(
         JournalEntry.chung_tu_id == phieu.id,
     ).first()
 
-    if journal_items and not phieu.bo_qua_hach_toan and not _existing_journal:
+    total_journal_value = sum(float(i["so_luong"]) * float(i["don_gia"]) for i in journal_items)
+    if journal_items and not phieu.bo_qua_hach_toan and not _existing_journal and total_journal_value > 0:
         # 1. Bút toán xưởng xuất:
         lines_xuat = []
         for i in journal_items:

@@ -380,10 +380,14 @@ async def broadcast_mutations(request: Request, call_next):
     if len(segments) < 3 or not segments[2]:
         return response
     resource = segments[2]
+    # Extract numeric id from /api/{resource}/{id}/... if present
+    id_val: int | None = None
+    if len(segments) > 3 and segments[3].isdigit():
+        id_val = int(segments[3])
 
     async def safe_emit():
         try:
-            await sio.emit("data_changed", {"resource": resource, "method": request.method})
+            await sio.emit("data_changed", {"resource": resource, "method": request.method, "id": id_val})
         except Exception:
             logging.getLogger("erp").warning("broadcast_mutations emit failed", exc_info=True)
 

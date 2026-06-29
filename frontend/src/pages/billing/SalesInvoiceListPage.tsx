@@ -3,8 +3,8 @@ import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Input, Modal, Row, Select, Space, Table, Tag, Typography,
-  message, Switch, Tooltip,
+  Badge, Button, Card, Col, DatePicker, Input, Modal, Row, Select, Space,
+  Table, Tabs, Tag, Typography, message, Switch, Tooltip,
 } from 'antd'
 import {
   PlusOutlined, FileExcelOutlined, FilePdfOutlined, EyeOutlined, ImportOutlined,
@@ -16,10 +16,12 @@ import {
   billingApi, SalesInvoice, SalesInvoiceListItem,
   TRANG_THAI_INVOICE, HINH_THUC_TT,
 } from '../../api/billing'
+import type { InvoiceAdjustmentLog } from '../../api/billing'
 import { salesOrdersApi, SalesOrderListItem, TRANG_THAI_COLORS as SO_STATUS_COLORS } from '../../api/salesOrders'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
+import InvoiceAdjustmentListPage from './InvoiceAdjustmentListPage'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -28,6 +30,7 @@ export default function SalesInvoiceListPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
 
+  const [activeTab, setActiveTab] = useState<'invoices' | 'adjustments'>('invoices')
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
@@ -36,6 +39,11 @@ export default function SalesInvoiceListPage() {
   const [showFromSOModal, setShowFromSOModal] = useState(false)
   const [soSearch, setSoSearch] = useState('')
   const [selectedSOId, setSelectedSOId] = useState<number | null>(null)
+
+  const { data: pendingAdj = [] } = useQuery<InvoiceAdjustmentLog[]>({
+    queryKey: ['billing-adjustment-logs', { trang_thai: 'pending' }],
+    queryFn: () => billingApi.listAdjustmentLogs({ trang_thai: 'pending' }),
+  })
 
   const { data, isLoading } = useQuery({
     queryKey: ['billing-invoices', tuNgay, denNgay, filterTrangThai, quaHanOnly, page],
@@ -206,7 +214,7 @@ export default function SalesInvoiceListPage() {
   return (
     <PageLayout
       title="Hóa đơn bán hàng"
-      actions={
+      actions={activeTab === 'invoices' ? (
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint}>In</Button>
@@ -221,8 +229,18 @@ export default function SalesInvoiceListPage() {
           </Button>
           {settingsButton}
         </Space>
-      }
+      ) : undefined}
     >
+      <Tabs
+        activeKey={activeTab}
+        onChange={k => setActiveTab(k as 'invoices' | 'adjustments')}
+        style={{ marginBottom: 0 }}
+        items={[
+          {
+            key: 'invoices',
+            label: 'Danh sách hóa đơn',
+            children: (
+              <>
       {/* Filter bar */}
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
@@ -287,6 +305,23 @@ export default function SalesInvoiceListPage() {
       />
 
       <style>{`.row-overdue td { background: #fff1f0 !important; }`}</style>
+              </>
+            ),
+          },
+          {
+            key: 'adjustments',
+            label: (
+              <span>
+                Yêu cầu điều chỉnh
+                {pendingAdj.length > 0 && (
+                  <Badge count={pendingAdj.length} size="small" style={{ marginLeft: 6 }} />
+                )}
+              </span>
+            ),
+            children: <InvoiceAdjustmentListPage />,
+          },
+        ]}
+      />
 
       <Modal
         open={showFromSOModal}

@@ -101,3 +101,20 @@ async def disconnect(sid: str):
 
 # ASGI app để mount vào FastAPI
 socket_app = socketio.ASGIApp(sio, socketio_path='')
+
+
+async def sio_emit(event: str, data: dict, room: str | None = None, **kwargs) -> None:
+    """Emit Socket.io event an toàn — không raise, không block HTTP response.
+
+    Nếu Socket.io server không khả dụng (restart, mạng chập chờn, chưa có client),
+    chỉ log WARNING và return. DB mutation của caller đã commit trước khi hàm này
+    được gọi, nên HTTP response luôn thành công dù socket có lỗi hay không.
+
+    Usage:
+        from app.socket_manager import sio_emit
+        await sio_emit("machine_status_update", {"phieu_in_id": x, "event": "started"})
+    """
+    try:
+        await sio.emit(event, data, room=room, **kwargs)
+    except Exception:
+        logger.warning("sio_emit(%r) failed", event, exc_info=True)

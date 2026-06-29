@@ -3,7 +3,7 @@ import type { ApiError } from '../api/types'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Layout, Avatar, Dropdown, Typography, Space, theme, Badge, Button, message,
-  Modal, Form, Input,
+  Modal, Form, Input, Tooltip,
 } from 'antd'
 import {
   DashboardOutlined, ShoppingCartOutlined,
@@ -11,7 +11,7 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined, ToolOutlined,
   AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined,
   ThunderboltOutlined, FileTextOutlined, CarOutlined,
-  CheckCircleOutlined,
+  CheckCircleOutlined, WifiOutlined, DisconnectOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
@@ -23,6 +23,7 @@ import GlobalSearchModal from './GlobalSearchModal'
 import { HotkeyProvider } from '../contexts/HotkeyContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useDataChangeSync } from '../hooks/useDataChangeSync'
+import { socket } from '../utils/socket'
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal'
 const namPhuongLogo = '/logo_namphuong.png'
 
@@ -411,6 +412,29 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
 
 function AppLayoutInner() {
   useDataChangeSync()
+
+  const [socketOk, setSocketOk] = useState(socket.connected)
+  useEffect(() => {
+    const onConnect = () => {
+      setSocketOk(true)
+      message.success({ content: 'Kết nối realtime đã khôi phục', duration: 3, key: 'socket-status' })
+    }
+    const onDisconnect = () => {
+      setSocketOk(false)
+      message.warning({
+        content: 'Mất kết nối realtime — dữ liệu có thể không cập nhật tự động',
+        duration: 0,
+        key: 'socket-status',
+      })
+    }
+    socket.on('connect', onConnect)
+    socket.on('disconnect', onDisconnect)
+    return () => {
+      socket.off('connect', onConnect)
+      socket.off('disconnect', onDisconnect)
+    }
+  }, [])
+
   const [collapsed, setCollapsed] = useState(false)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
   const [changePwdLoading, setChangePwdLoading] = useState(false)
@@ -729,6 +753,13 @@ function AppLayoutInner() {
           </div>
 
           <Space size={20}>
+            <Tooltip title={socketOk ? 'Realtime: đang kết nối' : 'Realtime: mất kết nối'}>
+              {socketOk
+                ? <WifiOutlined style={{ fontSize: 16, color: '#52c41a' }} />
+                : <DisconnectOutlined style={{ fontSize: 16, color: '#ff4d4f' }} />
+              }
+            </Tooltip>
+
             {role === 'ADMIN' && (
               <Dropdown menu={roleTestMenu}>
                 <Button type="dashed" icon={<ThunderboltOutlined />} danger>

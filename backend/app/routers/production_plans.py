@@ -740,6 +740,28 @@ def start_queue_line(
     return _build_queue_line(line_full, plan_full)
 
 
+@router.get("/{plan_id}/so-lenh")
+def get_plan_so_lenh(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> dict:
+    """Lightweight endpoint — trả về danh sách so_lenh trong KHSX mà không load toàn bộ plan."""
+    plan = db.query(ProductionPlan.id).filter(ProductionPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Không tìm thấy kế hoạch")
+    rows = (
+        db.query(ProductionOrder.so_lenh)
+        .join(ProductionOrderItem, ProductionOrderItem.production_order_id == ProductionOrder.id)
+        .join(ProductionPlanLine, ProductionPlanLine.production_order_item_id == ProductionOrderItem.id)
+        .filter(ProductionPlanLine.plan_id == plan_id)
+        .filter(ProductionOrder.so_lenh.isnot(None))
+        .distinct()
+        .all()
+    )
+    return {"so_lenh": [r[0] for r in rows]}
+
+
 @router.get("/{plan_id}", response_model=ProductionPlanResponse)
 def get_plan(
     plan_id: int,

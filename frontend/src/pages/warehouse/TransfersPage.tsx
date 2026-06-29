@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { RefetchIndicator } from '../../components/RefetchIndicator'
 import {
   Alert, Button, Card, Col, DatePicker, Descriptions, Divider, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Tooltip, Segmented,
@@ -83,7 +84,7 @@ export default function TransfersPage() {
     queryFn: () => warehousesApi.list().then(r => r.data),
   })
 
-  const { data: phieuList = [], isLoading } = useQuery({
+  const { data: phieuList = [], isLoading, isFetching } = useQuery({
     queryKey: ['phieu-chuyen', filterPhapNhanNguon, filterPhapNhanDich, filterXuongNguon, filterXuongDich, filterKhoXuat, filterKhoNhap, tuNgay, denNgay],
     queryFn: () => warehouseApi.listPhieuChuyen({
       warehouse_xuat_id: filterKhoXuat,
@@ -437,7 +438,7 @@ export default function TransfersPage() {
 
   return (
     <PageLayout
-      title="Chuyển kho liên xưởng"
+      title={<>Chuyển kho liên xưởng <RefetchIndicator isFetching={isFetching && !isLoading} /></>}
       actions={
         <Space>
           <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>

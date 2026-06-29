@@ -249,6 +249,9 @@ export const productionPlansApi = {
   get: (id: number) =>
     client.get<PlanResponse>(`/production-plans/${id}`),
 
+  getSoLenh: (id: number) =>
+    client.get<{ so_lenh: string[] }>(`/production-plans/${id}/so-lenh`),
+
   create: (data: PlanCreate) =>
     client.post<PlanResponse>('/production-plans', data),
 

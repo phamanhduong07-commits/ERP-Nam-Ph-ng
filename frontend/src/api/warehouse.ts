@@ -465,6 +465,7 @@ export interface CreatePhieuChuyenPayload {
   ngay: string
   ghi_chu?: string
   items: Omit<PhieuKhoItem, 'id' | 'thanh_tien'>[]
+  auto_approve?: boolean
 }
 
 export interface CreateStockAdjustmentPayload {

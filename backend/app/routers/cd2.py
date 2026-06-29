@@ -26,7 +26,7 @@ from app.services.inventory_service import (
     log_tx as _log_tx,
     get_workshop_warehouse as _get_workshop_warehouse,
 )
-from app.socket_manager import sio
+from app.socket_manager import sio_emit
 from app.services.defect_record_service import auto_defect_record
 
 router = APIRouter(prefix="/api/cd2", tags=["cd2"])
@@ -341,13 +341,17 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
 
     ym = date.today().strftime("%Y%m")
     pattern = f"TP-{ym}-%"
-    last_so = db.query(func.max(ProductionOutput.so_phieu)).filter(
-        ProductionOutput.so_phieu.like(pattern)
-    ).scalar()
+    _last_po = (
+        db.query(ProductionOutput)
+        .filter(ProductionOutput.so_phieu.like(pattern))
+        .order_by(desc(ProductionOutput.so_phieu))
+        .with_for_update()
+        .first()
+    )
     seq = 1
-    if last_so:
+    if _last_po:
         try:
-            seq = int(last_so.rsplit("-", 1)[-1]) + 1
+            seq = int(_last_po.so_phieu.rsplit("-", 1)[-1]) + 1
         except (ValueError, IndexError):
             seq = 1
 
@@ -1107,7 +1111,7 @@ async def move_phieu(
     if body.trang_thai not in VALID_STATES:
         raise HTTPException(status_code=400, detail=f"Trạng thái không hợp lệ: {body.trang_thai}")
 
-    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
 
@@ -1134,7 +1138,7 @@ async def move_phieu(
         _send_push_to_machine(db, body.may_in_id, None,
                               "Có lệnh mới!", f"{ten_hang} — {p.so_don or p.so_phieu}")
     # Phat tin hieu WebSocket cho Dashboard
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "machine_id": p.may_in_id,
         "trang_thai": p.trang_thai,
         "phieu_id": phieu_id
@@ -1159,7 +1163,7 @@ async def start_printing(phieu_id: int, db: Session = Depends(get_db), current_u
     p.ngay_in = date.today()
     _log_state_change(db, p, prev_state, "dang_in", "start_printing", current_user.id)
     db.commit()
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "phieu_in_id": phieu_id, "event": "start_printing", "trang_thai": "dang_in",
     })
     return _to_dict(_load(phieu_id, db))
@@ -1218,7 +1222,7 @@ async def complete_printing(
         p.so_con_thuc_te = so_con
     _log_state_change(db, p, "dang_in", "cho_dinh_hinh", "complete_printing", current_user.id)
     db.commit()
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "phieu_in_id": phieu_id, "event": "complete_printing", "trang_thai": "cho_dinh_hinh",
     })
     return _to_dict(_load(phieu_id, db))
@@ -1291,7 +1295,7 @@ async def ngung_in_tao_phieu_bu(
     db.commit()
     db.refresh(phieu_bu)
 
-    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "ngung_in"})
+    await sio_emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "ngung_in"})
     return {
         "phieu_goc": _to_dict(_load(phieu_id, db)),
         "phieu_bu": _to_dict(_load(phieu_bu.id, db)),
@@ -1341,7 +1345,7 @@ async def start_sau_in(
         event_trang_thai = "sau_in"
 
     db.commit()
-    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "start_sau_in", "trang_thai": event_trang_thai})
+    await sio_emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "start_sau_in", "trang_thai": event_trang_thai})
     return _to_dict(_load(phieu_id, db))
 
 
@@ -1387,7 +1391,7 @@ async def finish_sau_in(
         event_trang_thai = "hoan_thanh"
 
     db.commit()
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "phieu_in_id": phieu_id, "event": "finish_sau_in", "trang_thai": event_trang_thai,
     })
     return _to_dict(_load(phieu_id, db))
@@ -1470,7 +1474,7 @@ async def ngung_dinh_hinh_tao_phieu_bu(
     db.commit()
     db.refresh(phieu_bu)
 
-    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "ngung_dinh_hinh"})
+    await sio_emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "ngung_dinh_hinh"})
     return {
         "phieu_goc": _to_dict(_load(p.id, db)),
         "phieu_bu": _to_dict(_load(phieu_bu.id, db)),
@@ -1495,7 +1499,7 @@ async def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depe
                 p.trang_thai}'")
     p.may_sau_in_id = body.may_sau_in_id
     db.commit()
-    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "assign_sau_in"})
+    await sio_emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "assign_sau_in"})
     if body.may_sau_in_id:
         ten_hang = p.ten_hang or p.so_phieu or "Lệnh mới"
         _send_push_to_machine(db, None, body.may_sau_in_id,
@@ -1517,7 +1521,7 @@ async def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db),
     p.trang_thai = "dang_sau_in"
     _log_state_change(db, p, "sau_in", "dang_sau_in", "bat_dau_sau_in", current_user.id if current_user else None)
     db.commit()
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "phieu_in_id": phieu_id, "event": "bat_dau_sau_in", "trang_thai": "dang_sau_in",
     })
     return _to_dict(_load(phieu_id, db))
@@ -1540,7 +1544,7 @@ async def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), current_us
     p.gio_bat_dau_dinh_hinh = None
     _log_state_change(db, p, prev_tra_ve_state, "sau_in", "tra_ve_sau_in", current_user.id)
     db.commit()
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "phieu_in_id": phieu_id, "event": "tra_ve_sau_in", "trang_thai": "sau_in",
     })
     return _to_dict(_load(phieu_id, db))
@@ -1565,7 +1569,7 @@ async def tam_dung_in(phieu_id: int, body: TamDungBody, db: Session = Depends(ge
     p.tam_dung_luc = datetime.now()
     p.tam_dung_ly_do = body.ly_do.strip()
     db.commit()
-    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tam_dung"})
+    await sio_emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tam_dung"})
     return _to_dict(_load(phieu_id, db))
 
 
@@ -1578,7 +1582,7 @@ async def tiep_tuc_in(phieu_id: int, db: Session = Depends(get_db), _: Optional[
     p.tam_dung_luc = None
     p.tam_dung_ly_do = None
     db.commit()
-    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tiep_tuc"})
+    await sio_emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tiep_tuc"})
     return _to_dict(_load(phieu_id, db))
 
 
@@ -1648,7 +1652,7 @@ async def tra_ve_kho_phoi(phieu_id: int, db: Session = Depends(get_db), current_
     p.tam_dung_ly_do = None
     _log_state_change(db, p, prev_state, "huy", "tra_ve_kho_phoi", current_user.id)
     db.commit()
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "phieu_in_id": phieu_id, "event": "tra_ve_kho_phoi",
     })
     return _to_dict(_load(phieu_id, db))
@@ -1679,7 +1683,7 @@ async def huy_phieu(phieu_id: int, db: Session = Depends(get_db), current_user: 
     p.tam_dung_ly_do = None
     _log_state_change(db, p, prev_huy_state, p.trang_thai, "huy_phieu", current_user.id)
     db.commit()
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "phieu_in_id": phieu_id, "event": "huy_phieu", "trang_thai": p.trang_thai,
     })
     return _to_dict(_load(phieu_id, db))
@@ -1888,7 +1892,7 @@ async def create_scan_log(
     db.add(log)
     db.commit()
     log = db.query(ScanLog).options(joinedload(ScanLog.may_scan_obj)).filter(ScanLog.id == log.id).first()
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "event_type": "scan_log_created",
         "may_scan_id": data.may_scan_id,
         "so_lsx": data.so_lsx,
@@ -2625,7 +2629,7 @@ async def track_production(data: TrackPayload, db: Session = Depends(get_db),
     if data.machine_id is not None:
         db.refresh(log)
         log_id = log.id
-    await sio.emit("machine_status_update", {
+    await sio_emit("machine_status_update", {
         "machine_id": data.machine_id,
         "event_type": data.event_type,
         "production_order_id": data.production_order_id,

@@ -218,6 +218,7 @@ class PhieuChuyenIn(BaseModel):
     ngay: date
     ghi_chu: Optional[str] = None
     items: list[PhieuChuyenItemIn]
+    auto_approve: bool = False
 
 
 class StockAdjustmentItemIn(BaseModel):

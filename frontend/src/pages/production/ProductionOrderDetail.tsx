@@ -269,7 +269,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const khoNhapPhoiDuKien = order?.ten_kho_nhap_phoi_du_kien ?? null
 
   const updateSxMutation = useMutation({
-    mutationFn: (vals: { phap_nhan_id?: number | null; phan_xuong_id?: number | null; phoi_phan_xuong_id?: number | null; tan_dung?: boolean }) =>
+    mutationFn: (vals: { phap_nhan_id?: number | null; phan_xuong_id?: number | null; phoi_phan_xuong_id?: number | null; tan_dung?: boolean; in_2_lan?: boolean }) =>
       productionOrdersApi.update(Number(id), vals),
     onSuccess: () => {
       message.success('Cập nhật thành công')
@@ -948,6 +948,15 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                     onChange={(v) => updateSxMutation.mutate({ tan_dung: v })}
                   />
                 </Tooltip>
+              </Descriptions.Item>
+              <Descriptions.Item label="In 2 lần">
+                <Switch
+                  checked={order.in_2_lan}
+                  checkedChildren="In 2 lần"
+                  unCheckedChildren="Bình thường"
+                  loading={updateSxMutation.isPending}
+                  onChange={(v) => updateSxMutation.mutate({ in_2_lan: v })}
+                />
               </Descriptions.Item>
               <Descriptions.Item label="Bắt đầu (KH)">
                 {order.ngay_bat_dau_ke_hoach

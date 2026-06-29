@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery } from '@tanstack/react-query'
+import { RefetchIndicator } from '../../components/RefetchIndicator'
 import {
   Button, Card, Col, DatePicker, Dropdown,
   Row, Select, Space, Table, Tag, Typography,
@@ -51,7 +52,7 @@ export default function CashPaymentListPage() {
   const [filterPhanXuong, setFilterPhanXuong] = useState<number | undefined>()
   const [page, setPage] = useState(1)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['payments', tuNgay, denNgay, filterTrangThai, filterPhapNhan, filterPhanXuong, page],
     queryFn: () =>
       paymentApi.list({
@@ -215,7 +216,7 @@ export default function CashPaymentListPage() {
 
   return (
     <PageLayout
-      title="Phiếu chi nhà cung cấp"
+      title={<>Phiếu chi nhà cung cấp <RefetchIndicator isFetching={isFetching && !isLoading} /></>}
       actions={
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>

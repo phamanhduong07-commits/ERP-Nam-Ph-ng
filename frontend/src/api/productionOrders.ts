@@ -95,6 +95,7 @@ export interface ProductionOrder {
   ghi_chu_don_hang: string | null
   don_gia_noi_bo: number | null
   tan_dung: boolean
+  in_2_lan: boolean
   phoi_phan_xuong_id: number | null
   ten_phoi_phan_xuong: string | null
   ten_kho_nhap_phoi_du_kien: string | null

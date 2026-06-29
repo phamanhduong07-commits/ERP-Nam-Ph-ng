@@ -181,6 +181,7 @@ export default function KhoPhoiPage() {
         warehouse_nhap_id: chuyenDstId,
         ngay: dayjs().format('YYYY-MM-DD'),
         ghi_chu: `Chuyển phôi ${chuyenRows.map(r => r.so_lenh).join(', ')} → ${chuyenRows[0].ten_phan_xuong ?? ''}`,
+        auto_approve: true,
         items: chuyenRows
           .filter(r => (chuyenQtys[r.production_order_id] ?? 0) > 0)
           .map(r => ({

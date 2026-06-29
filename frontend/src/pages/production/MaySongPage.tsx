@@ -969,15 +969,22 @@ export default function MaySongPage() {
     refetchIntervalInBackground: false,
   })
 
-  // Khi chọn KH: lấy set so_lenh trong KH đó để filter
+  // Lightweight query: chỉ lấy danh sách so_lenh để filter table (không deep join)
+  const { data: khSoLenhData } = useQuery({
+    queryKey: ['ke-hoach-so-lenh', filterKhId],
+    queryFn: () => productionPlansApi.getSoLenh(filterKhId!).then(r => r.data),
+    enabled: filterKhId != null,
+    staleTime: 5 * 60_000,
+  })
+  // Full detail: chỉ dùng cho modal hoàn thành / ngưng — load sau
   const { data: khDetail } = useQuery({
     queryKey: ['ke-hoach-detail', filterKhId],
     queryFn: () => productionPlansApi.get(filterKhId!).then(r => r.data),
     enabled: filterKhId != null,
     staleTime: 60_000,
   })
-  const khSoLenhSet: Set<string> | null = khDetail
-    ? new Set(khDetail.lines.map(l => l.so_lenh).filter((s): s is string => !!s))
+  const khSoLenhSet: Set<string> | null = khSoLenhData
+    ? new Set(khSoLenhData.so_lenh)
     : null
 
   // Lọc và hiển thị Tab 1

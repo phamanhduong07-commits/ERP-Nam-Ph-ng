@@ -23,6 +23,7 @@ import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
 import { useHotkey } from '../../hooks/useHotkey'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
+import { RefetchIndicator } from '../../components/RefetchIndicator'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -88,7 +89,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
     staleTime: 30 * 1000,
   })
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['sales-orders', search, trangThai, phapNhanId, dateRange, page, myOnly],
     queryFn: () => salesOrdersApi.list({
       search,
@@ -377,7 +378,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
       <Card style={{ marginBottom: 8 }} styles={{ body: { padding: '12px 16px' } }}>
         <Row justify="space-between" align="middle">
           <Col>
-            <Title level={5} style={{ margin: 0 }}>Đơn hàng</Title>
+            <Title level={5} style={{ margin: 0 }}>Đơn hàng <RefetchIndicator isFetching={isFetching && !isLoading} /></Title>
           </Col>
           <Col>
             <Space size={4}>

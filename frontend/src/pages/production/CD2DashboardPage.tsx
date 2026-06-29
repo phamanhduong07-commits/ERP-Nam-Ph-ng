@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { RefetchIndicator } from '../../components/RefetchIndicator'
 import { Card, Col, Row, Space, Spin, Statistic, Typography, Button, Table, Tag, Modal } from 'antd'
 import {
   PrinterOutlined, BarChartOutlined, HistoryOutlined,
@@ -43,7 +44,7 @@ export default function CD2DashboardPage() {
   const [showMobilePreview, setShowMobilePreview] = useState(false)
   const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['cd2-dashboard', phanXuongId],
     queryFn: () => cd2Api.getDashboard(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
     // refetchInterval removed in favor of WebSockets
@@ -154,6 +155,7 @@ export default function CD2DashboardPage() {
           <Space>
             <BarChartOutlined style={{ fontSize: 22, color: '#1677ff' }} />
             <Title level={4} style={{ margin: 0 }}>Tổng quan Công Đoạn 2</Title>
+            <RefetchIndicator isFetching={isFetching && !isLoading} />
             <CD2WorkshopSelector value={phanXuongId} onChange={setPhanXuongId} phanXuongList={phanXuongList} />
           </Space>
         </Col>

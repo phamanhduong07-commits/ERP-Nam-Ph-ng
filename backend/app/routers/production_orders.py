@@ -204,6 +204,7 @@ def _build_response(order: ProductionOrder, db: Session | None = None) -> Produc
         ghi_chu_don_hang=order.sales_order.ghi_chu if order.sales_order else None,
         don_gia_noi_bo=getattr(order, "don_gia_noi_bo", None),
         tan_dung=getattr(order, "tan_dung", False),
+        in_2_lan=getattr(order, "in_2_lan", False),
         phoi_phan_xuong_id=getattr(order, "phoi_phan_xuong_id", None),
         ten_phoi_phan_xuong=(
             order.phoi_phan_xuong.ten_xuong if getattr(order, "phoi_phan_xuong", None) else None
@@ -651,6 +652,8 @@ def complete_order(
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+    if order.trang_thai == "hoan_thanh":
+        return _build_response(_load_order(order_id, db), db)
     if order.trang_thai not in ("moi", "dang_chay", "tam_dung"):
         raise HTTPException(status_code=400, detail=f"Không thể hoàn thành lệnh ở trạng thái '{order.trang_thai}'")
 

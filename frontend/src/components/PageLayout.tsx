@@ -3,7 +3,7 @@ import { Breadcrumb } from 'antd'
 import type { BreadcrumbProps } from 'antd'
 
 interface PageLayoutProps {
-  title: string
+  title: ReactNode
   breadcrumb?: BreadcrumbProps['items']
   actions?: ReactNode
   children: ReactNode

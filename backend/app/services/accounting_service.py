@@ -4,7 +4,6 @@ from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import desc, func, and_, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy.exc import CompileError as _CompileError
 
 from app.models.billing import SalesInvoice
 from app.models.accounting import (
@@ -628,6 +627,7 @@ class AccountingService:
             self.db.query(model)
             .filter(model.so_phieu.like(f"{full_prefix}%"))
             .order_by(desc(model.so_phieu))
+            .with_for_update()
             .first()
         )
         seq = int(last.so_phieu.rsplit("-", 1)[-1]) + 1 if last else 1
@@ -1208,15 +1208,12 @@ class AccountingService:
         )
 
     def approve_receipt(self, receipt_id: int, user_id: int) -> CashReceipt:
-        try:
-            receipt = (
-                self.db.query(CashReceipt)
-                .filter(CashReceipt.id == receipt_id)
-                .with_for_update()
-                .first()
-            )
-        except _CompileError:
-            receipt = self.db.get(CashReceipt, receipt_id)
+        receipt = (
+            self.db.query(CashReceipt)
+            .filter(CashReceipt.id == receipt_id)
+            .with_for_update()
+            .first()
+        )
         if not receipt:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         if receipt.trang_thai != "cho_duyet":
@@ -1248,15 +1245,12 @@ class AccountingService:
         user_id: int | None = None,
         ly_do: str | None = None,
     ) -> CashReceipt:
-        try:
-            receipt = (
-                self.db.query(CashReceipt)
-                .filter(CashReceipt.id == receipt_id)
-                .with_for_update()
-                .first()
-            )
-        except _CompileError:
-            receipt = self.db.get(CashReceipt, receipt_id)
+        receipt = (
+            self.db.query(CashReceipt)
+            .filter(CashReceipt.id == receipt_id)
+            .with_for_update()
+            .first()
+        )
         if not receipt:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         if receipt.trang_thai == "huy":
@@ -1750,15 +1744,12 @@ class AccountingService:
         user_id: int | None = None,
         ly_do: str | None = None,
     ) -> CashPayment:
-        try:
-            p = (
-                self.db.query(CashPayment)
-                .filter(CashPayment.id == payment_id)
-                .with_for_update()
-                .first()
-            )
-        except _CompileError:
-            p = self.db.get(CashPayment, payment_id)
+        p = (
+            self.db.query(CashPayment)
+            .filter(CashPayment.id == payment_id)
+            .with_for_update()
+            .first()
+        )
         if not p:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
         if p.trang_thai == "huy":
