@@ -10,7 +10,7 @@ import {
   ArrowLeftOutlined, ScanOutlined, WarningFilled,
   DesktopOutlined, HistoryOutlined as HistoryIcon, LogoutOutlined, CameraOutlined,
   UnorderedListOutlined, InfoCircleOutlined, ClockCircleOutlined,
-  CaretRightFilled, ExclamationCircleFilled, SwapOutlined,
+  CaretRightFilled, ExclamationCircleFilled, SwapOutlined, EditOutlined,
 } from '@ant-design/icons'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
@@ -286,6 +286,11 @@ export default function MobileTrackingPage() {
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [showDoneList, setShowDoneList] = useState(false)
+  const [editingDonePhieu, setEditingDonePhieu] = useState<PhieuIn | null>(null)
+  const [doneEditOk, setDoneEditOk] = useState<number | null>(null)
+  const [doneEditLoi, setDoneEditLoi] = useState<number | null>(null)
+  const [doneEditGhiChu, setDoneEditGhiChu] = useState('')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [sauInElapsedSeconds, setSauInElapsedSeconds] = useState(0)
   const [clockTime, setClockTime] = useState(dayjs().format('HH:mm'))
@@ -618,6 +623,23 @@ export default function MobileTrackingPage() {
       setIsDinhHinhCompleteModalOpen(false)
       dinhHinhForm.resetFields()
       invalidate()
+    },
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
+  })
+
+  // ── Sửa kết quả lệnh đã hoàn thành ──────────────────────────────────────
+
+  const suaKetQuaMutation = useMutation({
+    mutationFn: (data: { id: number; ok: number | null; loi: number | null; ghiChu: string }) =>
+      cd2Api.suaKetQua(data.id, isSauInMode
+        ? { so_luong_sau_in_ok: data.ok ?? undefined, so_luong_sau_in_loi: data.loi ?? undefined, ghi_chu_sau_in: data.ghiChu }
+        : { so_luong_in_ok: data.ok ?? undefined, so_luong_loi: data.loi ?? undefined, ghi_chu_ket_qua: data.ghiChu }),
+    onSuccess: (res) => {
+      message.success('Đã cập nhật kết quả!')
+      setEditingDonePhieu(null)
+      invalidate()
+      // Nếu đang là lệnh hiện tại, cập nhật luôn
+      if (currentOrder?.id === res.data.id) setCurrentOrder(res.data)
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
@@ -1174,9 +1196,47 @@ export default function MobileTrackingPage() {
 
           {donePhieuList.length > 0 && (
             <div style={{ marginTop: 4 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                ✅ {donePhieuList.length} lệnh đã hoàn thành hôm nay
-              </Text>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', padding: '4px 2px' }}
+                onClick={() => setShowDoneList(v => !v)}
+              >
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  ✅ {donePhieuList.length} lệnh đã hoàn thành
+                </Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>{showDoneList ? '▲ thu gọn' : '▼ xem'}</Text>
+              </div>
+              {showDoneList && donePhieuList.map(dp => (
+                <div
+                  key={dp.id}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 4px', borderTop: '1px solid #f0f0f0' }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ fontSize: 12, fontWeight: 600 }}>{dp.so_phieu}</Text>
+                    {dp.ten_hang && (
+                      <Text type="secondary" style={{ fontSize: 11, marginLeft: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {dp.ten_hang}
+                      </Text>
+                    )}
+                    <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
+                      OK: {(isSauInMode ? dp.so_luong_sau_in_ok : dp.so_luong_in_ok)?.toLocaleString() ?? '--'}
+                    </Text>
+                  </div>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<EditOutlined />}
+                    style={{ color: '#1677ff', flexShrink: 0 }}
+                    onClick={() => {
+                      setEditingDonePhieu(dp)
+                      setDoneEditOk((isSauInMode ? dp.so_luong_sau_in_ok : dp.so_luong_in_ok) ?? null)
+                      setDoneEditLoi((isSauInMode ? dp.so_luong_sau_in_loi : dp.so_luong_loi) ?? null)
+                      setDoneEditGhiChu((isSauInMode ? dp.ghi_chu_sau_in : dp.ghi_chu_ket_qua) ?? '')
+                    }}
+                  >
+                    Sửa
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </Card>
@@ -2081,6 +2141,52 @@ export default function MobileTrackingPage() {
         onScan={text => { setIsScannerOpen(false); setSoLsx(text); handleLookup(text) }}
         onClose={() => setIsScannerOpen(false)}
       />
+
+      {/* ── Sửa kết quả lệnh đã hoàn thành ── */}
+      <Modal
+        title={`Sửa kết quả — ${editingDonePhieu?.so_phieu ?? ''}`}
+        open={!!editingDonePhieu}
+        onOk={() => suaKetQuaMutation.mutate({ id: editingDonePhieu!.id, ok: doneEditOk, loi: doneEditLoi, ghiChu: doneEditGhiChu })}
+        onCancel={() => setEditingDonePhieu(null)}
+        okText="Lưu"
+        cancelText="Hủy"
+        confirmLoading={suaKetQuaMutation.isPending}
+        styles={{ body: { paddingTop: 12 } }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>
+              {isSauInMode ? 'Số lượng OK (TP)' : 'Số lượng OK (in)'}
+            </div>
+            <InputNumber
+              style={{ width: '100%' }}
+              min={0}
+              value={doneEditOk}
+              onChange={v => setDoneEditOk(v)}
+              size="large"
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Số lượng lỗi</div>
+            <InputNumber
+              style={{ width: '100%' }}
+              min={0}
+              value={doneEditLoi}
+              onChange={v => setDoneEditLoi(v)}
+              size="large"
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Ghi chú</div>
+            <Input.TextArea
+              rows={2}
+              value={doneEditGhiChu}
+              onChange={e => setDoneEditGhiChu(e.target.value)}
+              placeholder="Ghi chú kết quả..."
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

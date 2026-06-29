@@ -326,6 +326,10 @@ export const cd2Api = {
   hoanThanh: (id: number, data?: Partial<SauInPayload>) => client.post(`/cd2/phieu-in/${id}/hoan-thanh`, data ?? {}),
   ngungDinhHinh: (id: number, data: { so_luong_sau_in_ok: number; so_luong_sau_in_loi?: number; ghi_chu_sau_in?: string }) =>
     client.post<{ phieu_goc: PhieuIn; phieu_bu: PhieuIn }>(`/cd2/phieu-in/${id}/ngung-dinh-hinh`, data),
+  suaKetQua: (id: number, data: {
+    so_luong_in_ok?: number; so_luong_loi?: number; ghi_chu_ket_qua?: string
+    so_luong_sau_in_ok?: number; so_luong_sau_in_loi?: number; ghi_chu_sau_in?: string
+  }) => client.put<PhieuIn>(`/cd2/phieu-in/${id}/sua-ket-qua`, data),
   huyPhieu: (id: number) => client.post(`/cd2/phieu-in/${id}/huy`),
   tamDungIn: (id: number, data: { ly_do: string }) => client.post(`/cd2/phieu-in/${id}/tam-dung`, data),
   tiepTucIn: (id: number) => client.post(`/cd2/phieu-in/${id}/tiep-tuc`),

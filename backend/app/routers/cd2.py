@@ -1435,6 +1435,44 @@ async def finish_sau_in(
     return _to_dict(_load(phieu_id, db))
 
 
+class SuaKetQuaBody(BaseModel):
+    so_luong_in_ok: Optional[Decimal] = Field(default=None, ge=0)
+    so_luong_loi: Optional[Decimal] = Field(default=None, ge=0)
+    ghi_chu_ket_qua: Optional[str] = None
+    so_luong_sau_in_ok: Optional[Decimal] = Field(default=None, ge=0)
+    so_luong_sau_in_loi: Optional[Decimal] = Field(default=None, ge=0)
+    ghi_chu_sau_in: Optional[str] = None
+
+
+@router.put("/phieu-in/{phieu_id}/sua-ket-qua")
+def sua_ket_qua_phieu_in(
+    phieu_id: int,
+    body: SuaKetQuaBody,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """Sửa kết quả lệnh sau khi hoàn thành (máy in và máy thành phẩm)."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai == "huy":
+        raise HTTPException(status_code=400, detail="Phiếu đã hủy, không thể sửa")
+    if body.so_luong_in_ok is not None:
+        p.so_luong_in_ok = body.so_luong_in_ok
+    if body.so_luong_loi is not None:
+        p.so_luong_loi = body.so_luong_loi
+    if body.ghi_chu_ket_qua is not None:
+        p.ghi_chu_ket_qua = body.ghi_chu_ket_qua
+    if body.so_luong_sau_in_ok is not None:
+        p.so_luong_sau_in_ok = body.so_luong_sau_in_ok
+    if body.so_luong_sau_in_loi is not None:
+        p.so_luong_sau_in_loi = body.so_luong_sau_in_loi
+    if body.ghi_chu_sau_in is not None:
+        p.ghi_chu_sau_in = body.ghi_chu_sau_in
+    db.commit()
+    return _to_dict(_load(phieu_id, db))
+
+
 @router.post("/phieu-in/{phieu_id}/ngung-dinh-hinh")
 async def ngung_dinh_hinh_tao_phieu_bu(
     phieu_id: int,
