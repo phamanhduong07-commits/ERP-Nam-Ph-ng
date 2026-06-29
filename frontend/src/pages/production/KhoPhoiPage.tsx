@@ -1094,11 +1094,25 @@ export default function KhoPhoiPage() {
                       {
                         title: 'Tồn (tấm)',
                         dataIndex: 'ton_kho',
-                        width: 80,
+                        width: 100,
                         align: 'right' as const,
-                        render: (v: number) => (
-                          <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 12 }}>{fmtN(v)}</Text>
-                        ),
+                        render: (_: number, row: KhoRow) => {
+                          if (row.cong_doan === 'cd2') {
+                            const cd2Stock = row.ton_kho_tai_cd2 ?? row.ton_kho
+                            const hgStock = row.ton_kho_tai_nguon ?? 0
+                            return (
+                              <Space direction="vertical" size={0} style={{ lineHeight: 1.4 }}>
+                                <Text style={{ fontSize: 11, color: '#888' }}>
+                                  HG: <Text strong style={{ fontSize: 12, color: hgStock > 0 ? '#fa8c16' : '#bbb' }}>{fmtN(hgStock)}</Text>
+                                </Text>
+                                <Text style={{ fontSize: 11, color: '#888' }}>
+                                  CD2: <Text strong style={{ fontSize: 12, color: cd2Stock > 0 ? '#389e0d' : '#bbb' }}>{fmtN(cd2Stock)}</Text>
+                                </Text>
+                              </Space>
+                            )
+                          }
+                          return <Text strong style={{ color: row.ton_kho > 0 ? '#389e0d' : '#cf1322', fontSize: 12 }}>{fmtN(row.ton_kho)}</Text>
+                        },
                       },
                       {
                         title: 'Phiếu in hiện tại',

@@ -666,6 +666,24 @@ def ton_kho_lsx(
     if not stats:
         return []
 
+    # Propagate chieu_kho/chieu_cat/ngay_nhap_kho từ kho nguồn (nhập trực tiếp)
+    # sang kho đích (nhận qua chuyển kho) cùng production_order_id.
+    # Nhóm theo order_id, tìm entry có dữ liệu kích thước → fill cho các entry còn None.
+    from collections import defaultdict
+    order_kho_map: dict = defaultdict(list)
+    for (oid, wid), data in stats.items():
+        order_kho_map[oid].append((wid, data))
+    for oid, entries in order_kho_map.items():
+        donor = next((d for _, d in entries if d.get("chieu_kho") is not None), None)
+        if donor is None:
+            continue
+        for _, data in entries:
+            if data.get("chieu_kho") is None:
+                data["chieu_kho"] = donor["chieu_kho"]
+                data["chieu_cat"] = donor["chieu_cat"]
+            if data.get("ngay_nhap_kho") is None and donor.get("ngay_nhap_kho"):
+                data["ngay_nhap_kho"] = donor["ngay_nhap_kho"]
+
     order_ids = list({k[0] for k in stats.keys()})
 
     # Lấy thông tin Lệnh SX
