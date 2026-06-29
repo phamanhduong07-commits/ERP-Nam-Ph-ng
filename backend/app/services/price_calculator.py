@@ -193,6 +193,8 @@ def calculate_dien_tich(
     cao: float,
     so_lop: int,
     loai_be: str | None = None,
+    ho_nap: float = 0.0,
+    ho_day: float = 0.0,
 ) -> dict[str, Any]:
     """
     Calculate all dimensions and area for the box.
@@ -241,10 +243,11 @@ def calculate_dien_tich(
         dien_tich = kho_tt * dai_tt / 10000
 
     elif loai == "A1":
-        kho1 = rong + cao + 3
+        _ho_reduction = (ho_nap + ho_day) / 2
+        kho1 = rong + cao + 3 - _ho_reduction
         so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
         kho_tt = kho1 * so_dao + 1.8
-        kho_kh = rong + cao + kho_offset_a1
+        kho_kh = rong + cao + kho_offset_a1 - _ho_reduction
         dai_kh = (dai + rong) * 2 + 3
         if so_lop >= 3 and dai_kh > HAI_MANH_THRESHOLD:
             hai_manh = True
@@ -687,9 +690,11 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
     chiet_khau: float = float(inp.get("chiet_khau", 0))
 
     loai_be: str | None = inp.get("loai_be")
+    ho_nap: float = float(inp.get("ho_nap") or 0)
+    ho_day: float = float(inp.get("ho_day") or 0)
 
     # ---- Dimensions ----
-    dims = calculate_dien_tich(loai_thung, dai, rong, cao, so_lop, loai_be)
+    dims = calculate_dien_tich(loai_thung, dai, rong, cao, so_lop, loai_be, ho_nap=ho_nap, ho_day=ho_day)
     dien_tich = dims["dien_tich_gia"]  # m²/unit dùng cho tính giá (SQL Server formula)
 
     # ---- Parse corrugated layers ----

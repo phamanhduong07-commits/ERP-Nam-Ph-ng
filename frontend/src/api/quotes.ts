@@ -36,6 +36,9 @@ export interface QuoteItem {
   loai_be?: string | null
   kho_sx?: number | null
   dai_sx?: number | null
+  ho_mo?: boolean | null
+  ho_nap?: number | null
+  ho_day?: number | null
   nhom_san_pham?: string | null
   co_tem_offset: boolean
   tem_loai_giay?: string | null
@@ -317,6 +320,8 @@ export function calcBoxDimensions(
   be_so_con: number = 1,
   loai_be: string | null | undefined = null,
   force_hai_manh: boolean = false,
+  ho_nap: number | null | undefined = null,
+  ho_day: number | null | undefined = null,
 ): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number; kho_ke_hoach: number; dai_ke_hoach: number; kho_sx: number; dai_sx: number; hai_manh: boolean } | null {
   if (!loai_thung || !dai || !rong || !cao) return null
   const D = dai, R = rong, C = cao
@@ -338,13 +343,15 @@ export function calcBoxDimensions(
   }
 
   switch (loai_thung) {
-    case 'A1':
-      kho1 = R + C + 3
+    case 'A1': {
+      const _hoRed = ((ho_nap ?? 0) + (ho_day ?? 0)) / 2
+      kho1 = R + C + 3 - _hoRed
       dai1 = (D + R) * 2 + 5
       dai_tt = so_lop === 7 ? (D + R) * 2 + 5 : (D + R) * 2 + 4
-      kho_ke_hoach = R + C + off
+      kho_ke_hoach = R + C + off - _hoRed
       dai_ke_hoach = (D + R) * 2 + 3
       break
+    }
     case 'A3':
       kho1 = 2 * R + C + 3
       dai1 = (D + R) * 2 + 5

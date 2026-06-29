@@ -610,6 +610,27 @@ def ton_kho_lsx(
         PhieuNhapPhoiSong.production_order_id, PhieuNhapPhoiSong.warehouse_id
     ).all()
 
+    # 5d. Phôi trả về kho từ hủy lệnh in (tra_ve_kho_phoi → NHAP_TRA_VE_PHOI)
+    from app.models.cd2 import PhieuIn as _PhieuIn  # noqa: PLC0415  # already imported below but scoped
+    tra_lenh_in_q = (
+        db.query(
+            _PhieuIn.production_order_id,
+            InventoryTransaction.warehouse_id,
+            func.coalesce(func.sum(InventoryTransaction.so_luong), 0).label("tong_tra_lenh_in"),
+        )
+        .join(
+            InventoryTransaction,
+            (InventoryTransaction.chung_tu_loai == "phieu_in")
+            & (InventoryTransaction.chung_tu_id == _PhieuIn.id)
+            & (InventoryTransaction.loai_giao_dich == "NHAP_TRA_VE_PHOI"),
+        )
+    )
+    if allowed_order_ids is not None:
+        tra_lenh_in_q = tra_lenh_in_q.filter(_PhieuIn.production_order_id.in_(allowed_order_ids))
+    tra_lenh_in_rows = tra_lenh_in_q.group_by(
+        _PhieuIn.production_order_id, InventoryTransaction.warehouse_id
+    ).all()
+
     # 4. Gom tất cả tổ hợp (LSX, Kho) có phát sinh
     stats = {}  # (order_id, wh_id) -> data
 
@@ -662,6 +683,13 @@ def ton_kho_lsx(
                          "chuyen_den": 0.0, "ban_phe": 0.0, "chieu_kho": None, "chieu_cat": None})
         stats[key].setdefault("ban_phe", 0.0)
         stats[key]["ban_phe"] += float(r.tong_ban_phe)
+
+    for r in tra_lenh_in_rows:
+        key = (r.production_order_id, r.warehouse_id)
+        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0,
+                         "chuyen_den": 0.0, "tra_lenh_in": 0.0, "chieu_kho": None, "chieu_cat": None})
+        stats[key].setdefault("tra_lenh_in", 0.0)
+        stats[key]["tra_lenh_in"] += float(r.tong_tra_lenh_in)
 
     if not stats:
         return []
@@ -759,13 +787,14 @@ def ton_kho_lsx(
             continue
 
         # Tồn = (Nhập SX + Nhập Chuyển + Trả KH tốt) - (Xuất SX + Xuất Chuyển + Tận dụng + Bán Phế)
-        tra_khach = data.get("tra_khach", 0.0)
-        tan_dung  = data.get("tan_dung", 0.0)
-        ban_phe   = data.get("ban_phe", 0.0)
-        ton_kho = round((data["nhap"] + data["chuyen_den"] + tra_khach) - (data["xuat"] + data["chuyen_di"] + tan_dung + ban_phe), 3)
+        tra_khach   = data.get("tra_khach", 0.0)
+        tan_dung    = data.get("tan_dung", 0.0)
+        ban_phe     = data.get("ban_phe", 0.0)
+        tra_lenh_in = data.get("tra_lenh_in", 0.0)
+        ton_kho = round((data["nhap"] + data["chuyen_den"] + tra_khach + tra_lenh_in) - (data["xuat"] + data["chuyen_di"] + tan_dung + ban_phe), 3)
 
         # Nếu tồn <= 0 và không có nhập thì bỏ qua
-        if ton_kho <= 0 and (data["nhap"] + data["chuyen_den"] + tra_khach) == 0:
+        if ton_kho <= 0 and (data["nhap"] + data["chuyen_den"] + tra_khach + tra_lenh_in) == 0:
             continue
 
         first = order.items[0] if order.items else None
@@ -815,12 +844,12 @@ def ton_kho_lsx(
             "ten_hang": first.ten_hang if first else "",
             "ten_khach_hang": ten_khach_hang,
             "tong_nhap": data["nhap"] + data["chuyen_den"],
-            "tong_xuat": data["xuat"] + data["chuyen_di"],
+            "tong_xuat": max(0.0, data["xuat"] - tra_lenh_in) + data["chuyen_di"],
             "tong_tra_khach": tra_khach,
             "tong_chuyen_phoi": data["chuyen_di"],
             "ton_kho": ton_kho,
             "ton_kho_tai_nguon": max(0.0, round(data["nhap"] + tra_khach - data["chuyen_di"] - tan_dung - ban_phe, 3)),
-            "ton_kho_tai_cd2": max(0.0, round(data["chuyen_den"] - data["xuat"], 3)),
+            "ton_kho_tai_cd2": max(0.0, round(data["chuyen_den"] + tra_lenh_in - data["xuat"], 3)),
             "co_in": co_in,
             "don_gia_noi_bo": _don_gia,
             "warehouse_id": wh_id,

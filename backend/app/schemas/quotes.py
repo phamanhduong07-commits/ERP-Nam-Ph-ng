@@ -47,6 +47,9 @@ class QuoteItemCreate(BaseModel):
     loai_be: str | None = None
     kho_sx: Decimal | None = None
     dai_sx: Decimal | None = None
+    ho_mo: bool | None = None
+    ho_nap: float | None = None
+    ho_day: float | None = None
 
     nhom_san_pham: str | None = None
     co_tem_offset: bool = False
@@ -154,6 +157,9 @@ class QuoteItemResponse(BaseModel):
     loai_be: str | None
     kho_sx: Decimal | None
     dai_sx: Decimal | None
+    ho_mo: bool | None
+    ho_nap: float | None
+    ho_day: float | None
     nhom_san_pham: str | None
     co_tem_offset: bool
     tem_loai_giay: str | None

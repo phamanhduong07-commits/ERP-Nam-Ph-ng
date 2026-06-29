@@ -263,6 +263,30 @@ function ItemDetailDrawer({
             <Text type="secondary" style={{ fontSize: 11 }}>Diện tích (m²)</Text>
             <div><Text>{item.dien_tich != null ? Number(item.dien_tich).toFixed(4) : '—'}</Text></div>
           </Col>
+          {item.loai_thung === 'A1' && item.ho_mo && (
+            <>
+              <Col span={8}>
+                <Text type="secondary" style={{ fontSize: 11 }}>Hở nắp (cm)</Text>
+                <div><Text>{item.ho_nap != null ? +item.ho_nap : '0'}</Text></div>
+              </Col>
+              <Col span={8}>
+                <Text type="secondary" style={{ fontSize: 11 }}>Hở đáy (cm)</Text>
+                <div><Text>{item.ho_day != null ? +item.ho_day : '0'}</Text></div>
+              </Col>
+              {item.rong != null && (
+                <Col span={8}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>Cánh T / Cánh D</Text>
+                  <div>
+                    <Text style={{ fontSize: 11 }}>
+                      {(Number(item.rong) / 2 - (item.ho_nap ? +item.ho_nap : 0) / 2).toFixed(1)} cm
+                      &nbsp;/&nbsp;
+                      {(Number(item.rong) / 2 - (item.ho_day ? +item.ho_day : 0) / 2).toFixed(1)} cm
+                    </Text>
+                  </div>
+                </Col>
+              )}
+            </>
+          )}
         </Row>
 
         <Divider style={{ margin: '8px 0' }} />

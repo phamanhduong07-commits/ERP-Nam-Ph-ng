@@ -358,6 +358,8 @@ def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
         "chi_phi_khac": 0.0,
         "chiet_khau": 0.0,
         "don_gia_m2_override": float(_item_get(item, "don_gia_m2") or 0),
+        "ho_nap": float(_item_get(item, "ho_nap") or 0),
+        "ho_day": float(_item_get(item, "ho_day") or 0),
     }
     indirect_bd = get_indirect_breakdown_from_db(so_lop, db)
     addon_rates_db = get_addon_rates_from_db(db)

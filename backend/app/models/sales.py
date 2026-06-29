@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from sqlalchemy import (
-    Boolean, Date, DateTime, ForeignKey, Integer,
+    Boolean, Date, DateTime, Float, ForeignKey, Integer,
     Numeric, SmallInteger, String, Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -345,6 +345,9 @@ class QuoteItem(Base):
     loai_be: Mapped[str | None] = mapped_column(String(30))
     kho_sx: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dai_sx: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    ho_mo: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    ho_nap: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ho_day: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     nhom_san_pham: Mapped[str | None] = mapped_column(String(20))
     co_tem_offset: Mapped[bool] = mapped_column(Boolean, default=False)

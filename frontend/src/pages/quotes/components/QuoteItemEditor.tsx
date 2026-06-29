@@ -67,7 +67,7 @@ export default function QuoteItemEditor({
   hideCostDetails = false,
 }: QuoteItemEditorProps) {
   const boxCalc = !ci.khong_ct
-    ? calcBoxDimensions(ci.loai_thung, ci.dai, ci.rong, ci.cao, ci.so_lop, ci.be_so_con ?? 1, ci.loai_be, ci.be_hai_manh)
+    ? calcBoxDimensions(ci.loai_thung, ci.dai, ci.rong, ci.cao, ci.so_lop, ci.be_so_con ?? 1, ci.loai_be, ci.be_hai_manh, ci.ho_nap, ci.ho_day)
     : null
 
   return (
@@ -742,9 +742,41 @@ export default function QuoteItemEditor({
                   <Checkbox checked={ci.be_lo}   onChange={e => setCI({ be_lo: e.target.checked })}><Text style={{ fontSize: 11 }}>Bế Lỗ</Text></Checkbox>
                   <Checkbox checked={ci.co_be}   onChange={e => setCI({ co_be: e.target.checked, ...(!e.target.checked ? { loai_be: null, be_hai_manh: false } : {}) })}><Text style={{ fontSize: 11 }}>Bế khuôn</Text></Checkbox>
                   <Checkbox checked={ci.be_hai_manh} onChange={e => setCI({ be_hai_manh: e.target.checked })}><Text style={{ fontSize: 11 }}>2 mảnh</Text></Checkbox>
+                  {ci.loai_thung === 'A1' && (
+                    <Checkbox
+                      checked={ci.ho_mo ?? false}
+                      onChange={e => setCI({ ho_mo: e.target.checked, ...(!e.target.checked ? { ho_nap: null, ho_day: null } : {}) })}
+                    ><Text style={{ fontSize: 11 }}>Hở nắp/đáy</Text></Checkbox>
+                  )}
                 </Space>
               </Col>
             </Row>
+
+            {ci.loai_thung === 'A1' && ci.ho_mo && (
+              <Row gutter={8} style={{ marginTop: 6 }} align="middle">
+                <Col span={6}>
+                  <Text style={{ fontSize: 11 }}>Hở nắp (cm)</Text>
+                  <InputNumber size="small" style={{ width: '100%' }} min={0}
+                    value={ci.ho_nap ?? undefined}
+                    onChange={v => setCI({ ho_nap: v ?? null })} />
+                </Col>
+                <Col span={6}>
+                  <Text style={{ fontSize: 11 }}>Hở đáy (cm)</Text>
+                  <InputNumber size="small" style={{ width: '100%' }} min={0}
+                    value={ci.ho_day ?? undefined}
+                    onChange={v => setCI({ ho_day: v ?? null })} />
+                </Col>
+                {ci.rong != null && (
+                  <Col span={12} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 2 }}>
+                    <Text style={{ fontSize: 10, color: '#888' }}>
+                      Cánh T: {((ci.rong / 2) - (ci.ho_nap ?? 0) / 2).toFixed(1)} cm
+                      &nbsp;|&nbsp;
+                      Cánh D: {((ci.rong / 2) - (ci.ho_day ?? 0) / 2).toFixed(1)} cm
+                    </Text>
+                  </Col>
+                )}
+              </Row>
+            )}
 
             <Row gutter={8} style={{ marginTop: 6 }}>
               <Col span={8}>
