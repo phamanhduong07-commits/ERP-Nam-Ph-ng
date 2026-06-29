@@ -128,6 +128,11 @@ export default function ProductionOrderCreate() {
     if (selectedSO.phan_xuong_id && !form.getFieldValue('phan_xuong_id')) {
       form.setFieldValue('phan_xuong_id', selectedSO.phan_xuong_id)
     }
+    // Auto-fill giá nội bộ từ gia_phoi của dòng báo giá đầu tiên
+    const firstGiaPhoi = selectedSO.items.find(i => (i.gia_phoi ?? 0) > 0)?.gia_phoi
+    if (firstGiaPhoi && firstGiaPhoi > 0 && !form.getFieldValue('don_gia_noi_bo')) {
+      form.setFieldValue('don_gia_noi_bo', firstGiaPhoi)
+    }
     message.success(`Đã import ${newLines.length} dòng từ đơn hàng ${selectedSO.so_don}`)
   }
 

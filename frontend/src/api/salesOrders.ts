@@ -53,6 +53,7 @@ export interface SalesOrderItem {
   dien_tich?: number | null
   phan_xuong_id?: number | null
   ten_phan_xuong?: string | null
+  gia_phoi?: number
 }
 
 export interface SalesOrder {

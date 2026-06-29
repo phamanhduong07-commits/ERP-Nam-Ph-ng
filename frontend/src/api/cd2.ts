@@ -283,6 +283,7 @@ export interface KhoRow {
   chieu_kho: number | null
   chieu_cat: number | null
   be_so_con: number | null
+  tong_con: number
   tong_nhap: number
   tong_xuat: number
   tong_tra_khach: number

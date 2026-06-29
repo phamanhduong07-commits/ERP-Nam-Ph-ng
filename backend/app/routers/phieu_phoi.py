@@ -755,6 +755,7 @@ def ton_kho_lsx(
             trong_luong = phoi_area * gsm_total / Decimal("1000")
             the_tich = phoi_area * standard_thickness_m(to_hop)
 
+        co_in = any(it.loai_in in ("flexo", "ky_thuat_so") for it in order.items) if order.items else False
         result.append({
             "production_order_id": order_id,
             "so_lenh": order.so_lenh,
@@ -763,13 +764,17 @@ def ton_kho_lsx(
             "tong_nhap": data["nhap"] + data["chuyen_den"],
             "tong_xuat": data["xuat"] + data["chuyen_di"],
             "tong_tra_khach": tra_khach,
+            "tong_chuyen_phoi": data["chuyen_di"],
             "ton_kho": ton_kho,
             "ton_kho_tai_nguon": max(0.0, round(data["nhap"] + tra_khach - data["chuyen_di"], 3)),
             "ton_kho_tai_cd2": max(0.0, round(data["chuyen_den"] - data["xuat"], 3)),
+            "co_in": co_in,
+            "don_gia_noi_bo": float(order.don_gia_noi_bo) if order.don_gia_noi_bo else None,
             "warehouse_id": wh_id,
             "ten_kho": wh.ten_kho,
             "chieu_kho": data["chieu_kho"],
             "chieu_cat": data["chieu_cat"],
+            "be_so_con": first.be_so_con if first else None,
             "tong_con": round((data["nhap"] + data["chuyen_den"]) * (so_dao_map.get(first.id) or 0)) if first else 0,
             "dien_tich": float(phoi_area),
             "trong_luong": float(trong_luong),

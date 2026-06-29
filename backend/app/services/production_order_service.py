@@ -425,6 +425,15 @@ class ProductionOrderService:
             )
             self.db.add(item)
 
+        # Auto-populate don_gia_noi_bo from QuoteItem.gia_phoi if not explicitly set
+        if not order.don_gia_noi_bo:
+            for item_data in data.items:
+                if item_data.sales_order_item_id:
+                    soi = self.db.get(SalesOrderItem, item_data.sales_order_item_id)
+                    if soi and soi.quote_item and soi.quote_item.gia_phoi and soi.quote_item.gia_phoi > 0:
+                        order.don_gia_noi_bo = soi.quote_item.gia_phoi
+                        break
+
         # Cập nhật trạng thái đơn hàng → dang_sx
         if data.sales_order_id:
             so = self.db.query(SalesOrder).filter(SalesOrder.id == data.sales_order_id).first()

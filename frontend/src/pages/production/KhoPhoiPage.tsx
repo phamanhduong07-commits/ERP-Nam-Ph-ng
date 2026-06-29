@@ -14,6 +14,8 @@ import dayjs from 'dayjs'
 import { cd2Api } from '../../api/cd2'
 import type { KhoRow } from '../../api/cd2'
 import { TRANG_THAI_LABELS as CD2_LABELS } from '../../api/cd2'
+import { productionOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/productionOrders'
+import type { ProductionOrder, PhieuNhapPhoiSongListItem } from '../../api/productionOrders'
 import { warehousesApi } from '../../api/warehouses'
 import type { Warehouse } from '../../api/warehouses'
 import { warehouseApi } from '../../api/warehouse'
@@ -55,12 +57,18 @@ export default function KhoPhoiPage() {
   const [filterLoai, setFilterLoai] = useState<'co_in' | 'khong_in' | null>(null)
   const [filterTonKho, setFilterTonKho] = useState<'co_ton' | null>(null)
 
-  // Drawer chi tiết kho
-  const [detailWhId, setDetailWhId] = useState<number | null>(null)
-  const { data: tonKhoDetail = [], isFetching: detailFetching } = useQuery<TonKho[]>({
-    queryKey: ['ton-kho-detail', detailWhId],
-    queryFn: () => warehouseApi.getTonKho({ warehouse_id: detailWhId! }).then(r => r.data),
-    enabled: !!detailWhId,
+  // Drawer chi tiết LSX
+  const [detailItem, setDetailItem] = useState<{ orderId: number; row: KhoRow } | null>(null)
+  const { data: detailOrder, isFetching: detailFetching } = useQuery<ProductionOrder>({
+    queryKey: ['production-order-detail', detailItem?.orderId],
+    queryFn: () => productionOrdersApi.get(detailItem!.orderId).then(r => r.data),
+    enabled: !!detailItem?.orderId,
+    staleTime: 30_000,
+  })
+  const { data: detailPhieu = [] } = useQuery<PhieuNhapPhoiSongListItem[]>({
+    queryKey: ['phieu-nhap-phoi-drawer', detailItem?.orderId],
+    queryFn: () => productionOrdersApi.listAllPhieu({ production_order_id: detailItem!.orderId }).then(r => r.data),
+    enabled: !!detailItem?.orderId,
     staleTime: 30_000,
   })
 
@@ -484,9 +492,6 @@ export default function KhoPhoiPage() {
     .filter((w: Warehouse) => w.loai_kho === 'PHOI' && w.trang_thai)
     .map((w: Warehouse) => ({ value: w.id, label: `${w.ten_kho} (${w.ma_kho})` }))
 
-  const detailWh = detailWhId ? allWarehouses.find((w: Warehouse) => w.id === detailWhId) : null
-  const totalGiaTri = tonKhoDetail.reduce((s, r) => s + (r.gia_tri_ton ?? 0), 0)
-  const totalTonLuong = tonKhoDetail.reduce((s, r) => s + (r.ton_luong ?? 0), 0)
 
   return (
     <PageLayout title="Kho Phôi Sóng">
@@ -769,9 +774,7 @@ export default function KhoPhoiPage() {
                       }}
                       onRow={(row) => ({
                         onClick: () => {
-                          if (row.production_order_id) {
-                            navigate(`/production/orders/${row.production_order_id}`)
-                          }
+                          if (row.production_order_id) setDetailItem({ orderId: row.production_order_id, row })
                         },
                         style: { cursor: 'pointer' },
                       })}
@@ -787,6 +790,7 @@ export default function KhoPhoiPage() {
         onCancel={() => { setChuyenRows([]); setSelectedRowKeys([]) }}
         onOk={handleChuyenKho}
         okText="Tạo phiếu chuyển kho"
+        okButtonProps={{ disabled: !chuyenSrcId || !chuyenDstId || chuyenSrcId === chuyenDstId }}
         cancelText="Huỷ"
         confirmLoading={chuyenLoading}
         title={
@@ -919,110 +923,263 @@ export default function KhoPhoiPage() {
         )}
       </Modal>
 
-      {/* Drawer chi tiết kho */}
+      {/* Drawer chi tiết LSX */}
       <Drawer
         title={
-          <Space>
-            <span>{detailWh?.ten_kho ?? 'Chi tiết kho'}</span>
-            {detailWh?.ma_kho && <Tag color="blue">{detailWh.ma_kho}</Tag>}
-          </Space>
+          detailOrder
+            ? <Space>
+                <span>{detailOrder.so_lenh}</span>
+                <Tag color={TRANG_THAI_COLORS[detailOrder.trang_thai] ?? 'default'}>
+                  {TRANG_THAI_LABELS[detailOrder.trang_thai] ?? detailOrder.trang_thai}
+                </Tag>
+              </Space>
+            : 'Chi tiết LSX'
         }
-        open={!!detailWhId}
-        onClose={() => setDetailWhId(null)}
-        width={560}
+        open={!!detailItem}
+        onClose={() => setDetailItem(null)}
+        width={580}
+        extra={
+          detailOrder && (
+            <Button size="small" onClick={() => navigate(`/production/orders/${detailOrder.id}`)}>
+              Mở trang đầy đủ
+            </Button>
+          )
+        }
       >
         {detailFetching ? (
           <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
-        ) : (
+        ) : detailOrder ? (
           <Space direction="vertical" style={{ width: '100%' }} size={16}>
-            <Row gutter={16}>
+            {/* Thông tin chung */}
+            <Row gutter={[12, 8]}>
+              {detailOrder.ten_khach_hang && (
+                <Col span={24}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>Khách hàng</Text>
+                  <div><Text strong>{detailOrder.ten_khach_hang}</Text></div>
+                </Col>
+              )}
+              {detailOrder.so_don && (
+                <Col span={12}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>Số đơn</Text>
+                  <div><Text>{detailOrder.so_don}</Text></div>
+                </Col>
+              )}
               <Col span={12}>
-                <Statistic
-                  title="Tổng giá trị tồn"
-                  value={totalGiaTri}
-                  formatter={v => fmtN(Number(v)) + ' đ'}
-                  valueStyle={{ color: '#1677ff', fontSize: 18 }}
-                />
+                <Text type="secondary" style={{ fontSize: 11 }}>Ngày lệnh</Text>
+                <div><Text>{detailOrder.ngay_lenh}</Text></div>
               </Col>
-              <Col span={12}>
-                <Statistic
-                  title="Tổng tồn kho"
-                  value={totalTonLuong}
-                  formatter={v => fmtN(Number(v)) + ' tấm'}
-                  valueStyle={{ color: '#389e0d', fontSize: 18 }}
-                />
-              </Col>
+              {detailOrder.ten_phan_xuong && (
+                <Col span={12}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>Xưởng</Text>
+                  <div><Text>{detailOrder.ten_phan_xuong}</Text></div>
+                </Col>
+              )}
+              {detailOrder.ngay_hoan_thanh_ke_hoach && (
+                <Col span={12}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>Ngày giao KH</Text>
+                  <div><Text>{detailOrder.ngay_hoan_thanh_ke_hoach}</Text></div>
+                </Col>
+              )}
             </Row>
 
-            <Table<TonKho>
-              rowKey="id"
-              size="small"
-              dataSource={tonKhoDetail}
-              pagination={false}
-              scroll={{ x: 480 }}
-              columns={[
-                {
-                  title: 'Tên hàng',
-                  dataIndex: 'ten_hang',
-                  ellipsis: true,
-                  render: (v: string) => <Text strong style={{ fontSize: 12 }}>{v}</Text>,
-                },
-                {
-                  title: 'Tồn',
-                  dataIndex: 'ton_luong',
-                  width: 80,
-                  align: 'right' as const,
-                  render: (v: number, r: TonKho) => (
-                    <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
-                      <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 12 }}>{fmtN(v)}</Text>
-                      <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
-                    </Space>
-                  ),
-                },
-                ...(canViewPrice ? [{
-                  title: 'Đơn giá BQ',
-                  dataIndex: 'don_gia_binh_quan',
-                  width: 110,
-                  align: 'right' as const,
-                  render: (v: number) => v > 0
-                    ? <Text style={{ fontSize: 12 }}>{fmtCurrency(v)}</Text>
-                    : <Text type="secondary">—</Text>,
-                }] : []),
-                {
-                  title: 'Giá trị tồn',
-                  dataIndex: 'gia_tri_ton',
-                  width: 120,
-                  align: 'right' as const,
-                  render: (v: number) => (
-                    <Text strong style={{ color: v > 0 ? '#1677ff' : '#aaa', fontSize: 12 }}>
-                      {v > 0 ? fmtCurrency(v) : '—'}
-                    </Text>
-                  ),
-                },
-              ]}
-              summary={() => tonKhoDetail.length > 0 ? (
-                <Table.Summary.Row>
-                  <Table.Summary.Cell index={0}>
-                    <Text strong style={{ fontSize: 12 }}>Tổng cộng</Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={1} align="right">
-                    <Text strong style={{ color: '#389e0d', fontSize: 12 }}>{fmtN(totalTonLuong)}</Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={2} />
-                  <Table.Summary.Cell index={3} align="right">
-                    <Text strong style={{ color: '#1677ff', fontSize: 12 }}>{fmtCurrency(totalGiaTri)}</Text>
-                  </Table.Summary.Cell>
-                </Table.Summary.Row>
-              ) : null}
-            />
+            {/* Sản phẩm */}
+            <div>
+              <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Sản phẩm</Text>
+              <Table
+                rowKey="id"
+                size="small"
+                dataSource={detailOrder.items}
+                pagination={false}
+                scroll={{ x: 440 }}
+                columns={[
+                  {
+                    title: 'Tên hàng',
+                    dataIndex: 'ten_hang',
+                    ellipsis: true,
+                    render: (v: string, r) => (
+                      <Space direction="vertical" size={0}>
+                        <Text strong style={{ fontSize: 12 }}>{v}</Text>
+                        {r.dai && r.rong && r.cao && (
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {r.dai}×{r.rong}×{r.cao} · {r.so_lop}L
+                          </Text>
+                        )}
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: 'SL KH',
+                    dataIndex: 'so_luong_ke_hoach',
+                    width: 75,
+                    align: 'right' as const,
+                    render: (v: number, r) => (
+                      <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
+                        <Text strong style={{ fontSize: 12 }}>{fmtN(v)}</Text>
+                        <Text type="secondary" style={{ fontSize: 10 }}>{r.dvt}</Text>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: 'Đã làm',
+                    dataIndex: 'so_luong_hoan_thanh',
+                    width: 75,
+                    align: 'right' as const,
+                    render: (v: number, r) => {
+                      const pct = r.so_luong_ke_hoach > 0 ? Math.round(v / r.so_luong_ke_hoach * 100) : 0
+                      return (
+                        <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
+                          <Text strong style={{ fontSize: 12, color: pct >= 100 ? '#389e0d' : undefined }}>{fmtN(v)}</Text>
+                          <Text type="secondary" style={{ fontSize: 10 }}>{pct}%</Text>
+                        </Space>
+                      )
+                    },
+                  },
+                  {
+                    title: 'Khổ × Cắt',
+                    width: 90,
+                    align: 'center' as const,
+                    render: (_: unknown, r) => r.kho_tt && r.dai_tt
+                      ? <Text style={{ fontSize: 11 }}>{r.kho_tt}×{r.dai_tt}</Text>
+                      : <Text type="secondary">—</Text>,
+                  },
+                ]}
+              />
+            </div>
 
-            {tonKhoDetail.length === 0 && !detailFetching && (
-              <Text type="secondary" style={{ display: 'block', textAlign: 'center', padding: '24px 0' }}>
-                Kho này chưa có hàng tồn kho
-              </Text>
+            {/* Tồn kho phôi */}
+            {detailItem && (() => {
+              const r = detailItem.row
+              return (
+                <div>
+                  <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Tồn kho phôi</Text>
+                  <Table
+                    rowKey={() => 'phoi'}
+                    size="small"
+                    dataSource={[r]}
+                    pagination={false}
+                    scroll={{ x: 460 }}
+                    columns={[
+                      {
+                        title: 'Loại',
+                        width: 80,
+                        render: () => (
+                          <Tag color={r.co_in ? 'blue' : 'default'} style={{ fontSize: 11 }}>
+                            {r.co_in ? 'Có in' : 'Không in'}
+                          </Tag>
+                        ),
+                      },
+                      { title: 'Khổ', dataIndex: 'chieu_kho', width: 55, align: 'right' as const, render: (v: number | null) => v ?? '—' },
+                      { title: 'Cắt',  dataIndex: 'chieu_cat',  width: 55, align: 'right' as const, render: (v: number | null) => v ?? '—' },
+                      { title: 'Con nhỏ', dataIndex: 'tong_con', width: 72, align: 'right' as const, render: (v: number) => v > 0 ? fmtN(v) : '—' },
+                      {
+                        title: 'Nhập (tấm)',
+                        dataIndex: 'tong_nhap',
+                        width: 85,
+                        align: 'right' as const,
+                        render: (v: number) => <Text strong style={{ fontSize: 12 }}>{fmtN(v)}</Text>,
+                      },
+                      {
+                        title: 'Ngày nhập kho',
+                        dataIndex: 'ngay_nhap_kho',
+                        width: 110,
+                        render: (v: string | null) => v ? <Text style={{ fontSize: 12 }}>{v}</Text> : <Text type="secondary">—</Text>,
+                      },
+                      {
+                        title: 'Xuất (tấm)',
+                        dataIndex: 'tong_xuat',
+                        width: 80,
+                        align: 'right' as const,
+                        render: (v: number) => v > 0 ? fmtN(v) : <Text type="secondary">—</Text>,
+                      },
+                      {
+                        title: 'Tồn (tấm)',
+                        dataIndex: 'ton_kho',
+                        width: 80,
+                        align: 'right' as const,
+                        render: (v: number) => (
+                          <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 12 }}>{fmtN(v)}</Text>
+                        ),
+                      },
+                      {
+                        title: 'Phiếu in hiện tại',
+                        width: 110,
+                        render: () => r.phieu_in_hien_tai
+                          ? <Tag color="blue" style={{ fontSize: 11 }}>{r.phieu_in_hien_tai.so_phieu}</Tag>
+                          : <Text type="secondary" style={{ fontSize: 11 }}>Chưa có</Text>,
+                      },
+                    ]}
+                  />
+                </div>
+              )
+            })()}
+
+            {/* Phôi dư */}
+            {(() => {
+              const PHOI_DU_MAP: Record<string, [string, string]> = {
+                giao_sx:              ['blue',   'Cho SX'],
+                giao_khach:           ['green',  'Giao khách'],
+                da_nhap_kho_tan_dung: ['cyan',   'Kho tận dụng'],
+                ban_phe:              ['red',    'Bán Phế'],
+                mixed:                ['purple', 'Nhiều loại'],
+              }
+              const phoiDuRows = detailPhieu.map(p => {
+                const tongSoTam = p.tong_so_tam
+                const slTt = p.tong_so_luong_thuc_te
+                const slKh = p.items.reduce((s, it) => s + it.so_luong_ke_hoach, 0)
+                const slKhPhoi = slTt > 0 ? Math.round(slKh * tongSoTam / slTt) : 0
+                const excess = Math.round((tongSoTam - slKhPhoi) * 1000) / 1000
+                const processed = p.phoi_du_so_luong ?? 0
+                const remaining = Math.round((excess - processed) * 1000) / 1000
+                return { p, excess, processed, remaining }
+              }).filter(r => r.excess > 0.001)
+
+              if (phoiDuRows.length === 0) return null
+              return (
+                <div>
+                  <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Phôi dư</Text>
+                  {phoiDuRows.map(({ p, excess, processed, remaining }) => {
+                    const tt = p.phoi_du_trang_thai
+                    const [tagColor, tagLabel] = tt ? (PHOI_DU_MAP[tt] ?? ['default', tt]) : ['orange', 'Chưa xử lý']
+                    return (
+                      <div key={p.id} style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6, padding: '8px 12px', marginBottom: 6 }}>
+                        <Row gutter={12} align="middle">
+                          <Col flex="auto">
+                            <Text type="secondary" style={{ fontSize: 11 }}>{p.so_phieu}</Text>
+                            <div style={{ marginTop: 2 }}>
+                              <Text style={{ fontSize: 13 }}>Dư </Text>
+                              <Text strong style={{ fontSize: 14, color: '#E65100' }}>+{fmtN(excess)}</Text>
+                              <Text type="secondary" style={{ fontSize: 12 }}> phôi</Text>
+                              {processed > 0 && (
+                                <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
+                                  · đã xử lý {fmtN(processed)} · còn {fmtN(remaining)}
+                                </Text>
+                              )}
+                            </div>
+                          </Col>
+                          <Col>
+                            <Tag color={tagColor} style={{ fontSize: 11 }}>{tagLabel}</Tag>
+                          </Col>
+                        </Row>
+                        {p.phoi_du_ghi_chu && (
+                          <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                            {p.phoi_du_ghi_chu}
+                          </Text>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+
+            {detailOrder.ghi_chu && (
+              <div>
+                <Text type="secondary" style={{ fontSize: 11 }}>Ghi chú</Text>
+                <div><Text style={{ fontSize: 12 }}>{detailOrder.ghi_chu}</Text></div>
+              </div>
             )}
           </Space>
-        )}
+        ) : null}
       </Drawer>
     </PageLayout>
   )

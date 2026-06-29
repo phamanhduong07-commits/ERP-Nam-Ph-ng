@@ -79,6 +79,7 @@ class SalesOrderItemResponse(BaseModel):
     production_order_item_id: int | None = None
     phan_xuong_id: int | None = None
     ten_phan_xuong: str | None = None
+    gia_phoi: Decimal = Decimal("0")
 
     class Config:
         from_attributes = True

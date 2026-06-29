@@ -127,6 +127,12 @@ class SalesOrderItem(Base):
         return self.phan_xuong.ten_xuong if self.phan_xuong else None
 
     @property
+    def gia_phoi(self) -> Decimal:
+        if self.quote_item and self.quote_item.gia_phoi:
+            return self.quote_item.gia_phoi
+        return Decimal("0")
+
+    @property
     def thanh_tien(self) -> Decimal:
         """Thành tiền sau giảm giá"""
         tien_hang = self.so_luong * self.don_gia
