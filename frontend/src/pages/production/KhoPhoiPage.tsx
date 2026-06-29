@@ -292,6 +292,13 @@ export default function KhoPhoiPage() {
       render: (v: number | null) => v != null ? <Text style={{ fontSize: 12 }}>{v}</Text> : <Text type="secondary">—</Text>,
     },
     {
+      title: 'Con nhỏ',
+      dataIndex: 'so_dao',
+      width: 70,
+      align: 'center' as const,
+      render: (v: number | null) => v != null ? <Text style={{ fontSize: 12 }}>{v}</Text> : <Text type="secondary">—</Text>,
+    },
+    {
       title: 'Nhập (tấm)',
       dataIndex: 'tong_nhap',
       width: 95,

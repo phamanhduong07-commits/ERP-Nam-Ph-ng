@@ -158,6 +158,7 @@ _LOAI_KHO_SUFFIX: dict[str, str] = {
     "THANH_PHAM": "TP",
     "GIAY_CUON": "GC",
     "NVL_PHU": "NVL",
+    "PHOI_LOI": "PL",
 }
 
 _LOAI_KHO_TEN: dict[str, str] = {

@@ -588,6 +588,26 @@ def ton_kho_lsx(
         PhieuNhapPhoiSong.production_order_id, PhieuNhapPhoiSong.warehouse_id
     ).all()
 
+    # 5c. Phôi bán phế — NHAP_PHOI_LOI linked to phieu_nhap_phoi_song
+    ban_phe_q = (
+        db.query(
+            PhieuNhapPhoiSong.production_order_id,
+            PhieuNhapPhoiSong.warehouse_id,
+            func.coalesce(func.sum(InventoryTransaction.so_luong), 0).label("tong_ban_phe"),
+        )
+        .join(
+            InventoryTransaction,
+            (InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song")
+            & (InventoryTransaction.chung_tu_id == PhieuNhapPhoiSong.id)
+            & (InventoryTransaction.loai_giao_dich == "NHAP_PHOI_LOI"),
+        )
+    )
+    if allowed_order_ids is not None:
+        ban_phe_q = ban_phe_q.filter(PhieuNhapPhoiSong.production_order_id.in_(allowed_order_ids))
+    ban_phe_rows = ban_phe_q.group_by(
+        PhieuNhapPhoiSong.production_order_id, PhieuNhapPhoiSong.warehouse_id
+    ).all()
+
     # 4. Gom tất cả tổ hợp (LSX, Kho) có phát sinh
     stats = {}  # (order_id, wh_id) -> data
 
@@ -633,6 +653,13 @@ def ton_kho_lsx(
         stats[key].setdefault("tan_dung", 0.0)
         stats[key]["tan_dung"] += float(r.tong_tan_dung)
 
+    for r in ban_phe_rows:
+        key = (r.production_order_id, r.warehouse_id)
+        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0,
+                         "chuyen_den": 0.0, "ban_phe": 0.0, "chieu_kho": None, "chieu_cat": None})
+        stats[key].setdefault("ban_phe", 0.0)
+        stats[key]["ban_phe"] += float(r.tong_ban_phe)
+
     if not stats:
         return []
 
@@ -672,6 +699,14 @@ def ton_kho_lsx(
     )
     active_map = {p.production_order_id: {"so_phieu": p.so_phieu, "trang_thai": p.trang_thai} for p in active_phieus}
 
+    # Lấy so_dao từ production_plan_lines theo POI id
+    from app.models.production_plan import ProductionPlanLine
+    poi_ids = [item.id for o in orders for item in o.items]
+    plan_lines = db.query(ProductionPlanLine).filter(
+        ProductionPlanLine.production_order_item_id.in_(poi_ids)
+    ).all() if poi_ids else []
+    so_dao_map = {pl.production_order_item_id: pl.so_dao for pl in plan_lines}
+
     result = []
     for (order_id, wh_id), data in stats.items():
         order = order_map.get(order_id)
@@ -679,10 +714,11 @@ def ton_kho_lsx(
         if not order or not wh:
             continue
 
-        # Tồn = (Nhập SX + Nhập Chuyển + Trả KH tốt) - (Xuất SX + Xuất Chuyển + Tận dụng)
+        # Tồn = (Nhập SX + Nhập Chuyển + Trả KH tốt) - (Xuất SX + Xuất Chuyển + Tận dụng + Bán Phế)
         tra_khach = data.get("tra_khach", 0.0)
         tan_dung  = data.get("tan_dung", 0.0)
-        ton_kho = round((data["nhap"] + data["chuyen_den"] + tra_khach) - (data["xuat"] + data["chuyen_di"] + tan_dung), 3)
+        ban_phe   = data.get("ban_phe", 0.0)
+        ton_kho = round((data["nhap"] + data["chuyen_den"] + tra_khach) - (data["xuat"] + data["chuyen_di"] + tan_dung + ban_phe), 3)
 
         # Nếu tồn <= 0 và không có nhập thì bỏ qua
         if ton_kho <= 0 and (data["nhap"] + data["chuyen_den"] + tra_khach) == 0:
@@ -731,6 +767,8 @@ def ton_kho_lsx(
             "ten_kho": wh.ten_kho,
             "chieu_kho": data["chieu_kho"],
             "chieu_cat": data["chieu_cat"],
+            "be_so_con": first.be_so_con if first else None,
+            "so_dao": so_dao_map.get(first.id) if first else None,
             "dien_tich": float(phoi_area),
             "trong_luong": float(trong_luong),
             "the_tich": float(the_tich),

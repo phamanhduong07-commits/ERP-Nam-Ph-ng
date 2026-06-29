@@ -1301,7 +1301,7 @@ def list_phieu_nhap_phoi_song(
 
 class XuLyPhoiDuBody(BaseModel):
     so_luong_du: float
-    loai_xu_ly: str          # 'da_nhap_kho_tan_dung' | 'giao_sx' | 'giao_khach' | 'huy'
+    loai_xu_ly: str  # 'giao_sx' | 'giao_khach' | 'da_nhap_kho_tan_dung' | 'ban_phe'
     ghi_chu: str | None = None
 
 
@@ -1312,7 +1312,7 @@ def xu_ly_phoi_du(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Đánh dấu xử lý phôi dư — nếu loai_xu_ly='da_nhap_kho_tan_dung' thì cập nhật tồn kho TAN_DUNG."""
+    """Xử lý phôi dư: tan_dung/ban_phe tạo inventory transaction; giao_sx/giao_khach chỉ đánh dấu."""
     phieu = (
         db.query(PhieuNhapPhoiSong)
         .options(
@@ -1327,7 +1327,7 @@ def xu_ly_phoi_du(
 
     so_luong = Decimal(str(data.so_luong_du))
 
-    from app.models.inventory import InventoryBalance, InventoryTransaction
+    from app.models.inventory import InventoryTransaction
     from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
 
     order = phieu.production_order
@@ -1339,52 +1339,66 @@ def xu_ly_phoi_du(
         else "Phôi dư"
     )
 
+    # Reverse các transaction phôi dư cũ nếu user đổi sang option khác
+    _PHOI_DU_TX_TYPES = {"NHAP_PHOI_DU", "NHAP_PHOI_LOI"}
+    old_txs = (
+        db.query(InventoryTransaction)
+        .filter(
+            InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song",
+            InventoryTransaction.chung_tu_id == phieu_id,
+            InventoryTransaction.loai_giao_dich.in_(_PHOI_DU_TX_TYPES),
+        )
+        .all()
+    )
+    if old_txs and phan_xuong_id:
+        for tx in old_txs:
+            bal_rev = get_or_create_balance(db, tx.warehouse_id, ten_hang=ten_hang, don_vi="Tấm")
+            bal_rev.ton_luong = max(Decimal("0"), bal_rev.ton_luong - Decimal(str(tx.so_luong)))
+            db.delete(tx)
+
+    # Reset phoi_du_so_luong để tính lại từ đầu
+    phieu.phoi_du_so_luong = Decimal("0")
+
     if data.loai_xu_ly == "da_nhap_kho_tan_dung" and so_luong > 0:
         if not phan_xuong_id:
             raise HTTPException(status_code=400, detail="Lệnh SX chưa gắn xưởng.")
-
-        # Nhập vào kho TAN_DUNG — tồn kho phôi được trừ qua /ton-kho-lsx
         kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
         bal_td = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
         nhap_balance(bal_td, so_luong, Decimal("0"))
         log_tx(
             db, kho_td.id, "NHAP_PHOI_DU", so_luong, Decimal("0"),
             bal_td.ton_luong, "phieu_nhap_phoi_song", phieu_id,
-            created_by=current_user.id,
-            ghi_chu=data.ghi_chu,
+            created_by=current_user.id, ghi_chu=data.ghi_chu,
         )
-    else:
-        # Không nhập tận dụng — reversal các transaction NHAP_PHOI_DU cũ của phiếu này
-        # (trường hợp user bấm nhầm tận dụng trước, sau đổi sang giao_sx / hủy)
-        old_txs = (
-            db.query(InventoryTransaction)
-            .filter(
-                InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song",
-                InventoryTransaction.chung_tu_id == phieu_id,
-                InventoryTransaction.loai_giao_dich == "NHAP_PHOI_DU",
-            )
-            .all()
-        )
-        if old_txs and phan_xuong_id:
-            kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
-            bal_td = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
-            for tx in old_txs:
-                bal_td.ton_luong = max(Decimal("0"), bal_td.ton_luong - Decimal(str(tx.so_luong)))
-                db.delete(tx)
 
-    # Tích lũy số lượng đã xử lý
-    old_processed = Decimal(str(phieu.phoi_du_so_luong or 0))
-    new_processed = old_processed + so_luong
+    elif data.loai_xu_ly == "ban_phe" and so_luong > 0:
+        if not phan_xuong_id:
+            raise HTTPException(status_code=400, detail="Lệnh SX chưa gắn xưởng.")
+        kho_pl = _get_or_create_workshop_warehouse(db, phan_xuong_id, "PHOI_LOI")
+        bal_pl = get_or_create_balance(db, kho_pl.id, ten_hang=ten_hang, don_vi="Tấm")
+        nhap_balance(bal_pl, so_luong, Decimal("0"))
+        log_tx(
+            db, kho_pl.id, "NHAP_PHOI_LOI", so_luong, Decimal("0"),
+            bal_pl.ton_luong, "phieu_nhap_phoi_song", phieu_id,
+            created_by=current_user.id, ghi_chu=data.ghi_chu,
+        )
+
+    # giao_sx / giao_khach: mark only — phôi vẫn trong kho phôi, chờ phiếu thực sự
+
+    # Tích lũy số lượng đã xử lý (đơn vị phôi)
+    new_processed = so_luong
     phieu.phoi_du_so_luong = new_processed
     phieu.phoi_du_ghi_chu = data.ghi_chu
 
-    # Tính tổng phôi dư để biết còn bao nhiêu chưa xử lý
-    total_tt = sum(Decimal(str(it.so_luong_thuc_te or 0)) for it in phieu.items)
-    total_kh = sum(Decimal(str(it.so_luong_ke_hoach)) for it in phieu.items)
-    total_excess = total_tt - total_kh
-    remaining = total_excess - new_processed
+    # Tính remaining theo đơn vị phôi (nhất quán với phoi_du_so_luong)
+    total_so_tam  = sum(Decimal(str(it.so_tam or 0)) for it in phieu.items)
+    total_kh_thg  = sum(Decimal(str(it.so_luong_ke_hoach)) for it in phieu.items)
+    total_tt_thg  = sum(Decimal(str(it.so_luong_thuc_te or 0)) for it in phieu.items)
+    total_kh_phoi = (total_kh_thg * total_so_tam / total_tt_thg
+                     if total_tt_thg > 0 else Decimal("0"))
+    total_excess_phoi = total_so_tam - total_kh_phoi
+    remaining = total_excess_phoi - new_processed
 
-    # Chỉ đánh dấu hoàn tất khi đã xử lý hết
     if remaining <= Decimal("0.001"):
         phieu.phoi_du_trang_thai = data.loai_xu_ly
 

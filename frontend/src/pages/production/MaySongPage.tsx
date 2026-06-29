@@ -938,7 +938,7 @@ export default function MaySongPage() {
     phieu: PhieuNhapPhoiSongListItem
     excessQty: number
   } | null>(null)
-  const [xuLyLoaiXuLy, setXuLyLoaiXuLy] = useState<string>('da_nhap_kho_tan_dung')
+  const [xuLyLoaiXuLy, setXuLyLoaiXuLy] = useState<string>('giao_sx')
   const [xuLyGhiChu, setXuLyGhiChu] = useState<string>('')
   const [xuLySoLuong, setXuLySoLuong] = useState<number>(0)
   const qc = useQueryClient()
@@ -1355,7 +1355,7 @@ export default function MaySongPage() {
       message.success('Đã xử lý phôi dư')
       qc.invalidateQueries({ queryKey: ['phoi-du-phieu'] })
       setPhoiDuXuLyModal(null)
-      setXuLyLoaiXuLy('da_nhap_kho_tan_dung')
+      setXuLyLoaiXuLy('giao_sx')
       setXuLyGhiChu('')
     },
     onError: (e: unknown) => message.error(
@@ -2596,10 +2596,10 @@ export default function MaySongPage() {
                             const tt = r.phieu.phoi_du_trang_thai
                             if (!tt) return <Tag color="orange">Chưa xử lý</Tag>
                             const MAP: Record<string, [string, string]> = {
-                              da_nhap_kho_tan_dung: ['cyan', 'Nhập kho TDụng'],
-                              giao_sx: ['blue', 'Giao SX'],
-                              giao_khach: ['green', 'Giao khách'],
-                              huy: ['red', 'Huỷ'],
+                              giao_sx:              ['blue',   'Cho SX'],
+                              giao_khach:           ['green',  'Giao khách'],
+                              da_nhap_kho_tan_dung: ['cyan',   'Kho tận dụng'],
+                              ban_phe:              ['red',    'Bán Phế'],
                             }
                             const [color, label] = MAP[tt] ?? ['default', tt]
                             return (
@@ -2631,7 +2631,7 @@ export default function MaySongPage() {
                                   type="primary"
                                   onClick={() => {
                                     setPhoiDuXuLyModal({ phieu: r.phieu, excessQty: r.remaining })
-                                    setXuLyLoaiXuLy('da_nhap_kho_tan_dung')
+                                    setXuLyLoaiXuLy('giao_sx')
                                     setXuLyGhiChu('')
                                     setXuLySoLuong(r.remaining)
                                   }}
@@ -2817,10 +2817,10 @@ export default function MaySongPage() {
                 onChange={e => setXuLyLoaiXuLy(e.target.value)}
               >
                 <Space direction="vertical" size={6}>
-                  <Radio value="da_nhap_kho_tan_dung">Nhập kho tận dụng (dùng sau)</Radio>
-                  <Radio value="giao_sx">Giao thẳng cho SX khác</Radio>
+                  <Radio value="giao_sx">Cho sản xuất luôn</Radio>
                   <Radio value="giao_khach">Giao luôn cho khách</Radio>
-                  <Radio value="huy">Huỷ (loại bỏ)</Radio>
+                  <Radio value="da_nhap_kho_tan_dung">Nhập kho tận dụng (dùng sau)</Radio>
+                  <Radio value="ban_phe">Bán Phế</Radio>
                 </Space>
               </Radio.Group>
             </div>
