@@ -34,10 +34,12 @@ router = APIRouter(prefix="/api/defect-records", tags=["defect-records"])
 REF_TYPE_PRODUCTION_OUTPUT = "production_output"
 REF_TYPE_PHOI_ITEM = "phieu_nhap_phoi_song_item"
 REF_TYPE_SALES_RETURN_ITEM = "sales_return_item"
+REF_TYPE_PHIEU_IN = "phieu_in"
 KHAU_BY_REF_TYPE = {
     REF_TYPE_PRODUCTION_OUTPUT: "tp",
     REF_TYPE_PHOI_ITEM: "cd1",
     REF_TYPE_SALES_RETURN_ITEM: "tra_ve",
+    REF_TYPE_PHIEU_IN: "cd2",
 }
 
 _TRANG_THAI_LABEL = {
@@ -82,6 +84,7 @@ def _empty_context() -> dict:
         "phap_nhan_id": None,
         "ten_khach_hang": None,
         "ly_do_tra": None,
+        "ten_may": None,
     }
 
 
@@ -229,6 +232,37 @@ def _context_sales_return_item(ref_id: int, db: Session) -> dict:
     return ctx
 
 
+def _context_phieu_in(ref_id: int, db: Session) -> dict:
+    """Ngữ cảnh cho SP lỗi CD2: PhieuIn → ProductionOrder → PhanXuong → PhapNhan + MayIn."""
+    from app.models.cd2 import PhieuIn, MayIn
+
+    pi = db.get(PhieuIn, ref_id)
+    if not pi:
+        return _empty_context()
+
+    order = db.get(ProductionOrder, pi.production_order_id) if pi.production_order_id else None
+    px = db.get(PhanXuong, pi.phan_xuong_id) if pi.phan_xuong_id else None
+    pn_id = px.phap_nhan_id if px else (order.phap_nhan_id if order else None)
+    pn = db.get(PhapNhan, pn_id) if pn_id else None
+    may = db.get(MayIn, pi.may_in_id) if pi.may_in_id else None
+
+    ctx = _empty_context()
+    ctx.update({
+        "so_lenh": order.so_lenh if order else None,
+        "ten_hang": pi.ten_hang,
+        "ngay": str(pi.ngay_in) if pi.ngay_in else None,
+        "ca": pi.ca,
+        "so_phieu": pi.so_phieu,
+        "dvt": "Thùng",
+        "ten_phan_xuong": px.ten_xuong if px else None,
+        "ten_phap_nhan": pn.ten_viet_tat if pn else None,
+        "phan_xuong_id": pi.phan_xuong_id,
+        "phap_nhan_id": pn_id,
+        "ten_may": may.ten_may if may else None,
+    })
+    return ctx
+
+
 def _resolve_context(entry: DefectRecord, db: Session) -> dict:
     """Lấy ngữ cảnh nguồn theo ref_type. ref_type lạ → context rỗng (không vỡ shape)."""
     if entry.ref_type == REF_TYPE_PRODUCTION_OUTPUT:
@@ -237,6 +271,8 @@ def _resolve_context(entry: DefectRecord, db: Session) -> dict:
         return _context_phoi_item(entry.ref_id, db)
     if entry.ref_type == REF_TYPE_SALES_RETURN_ITEM:
         return _context_sales_return_item(entry.ref_id, db)
+    if entry.ref_type == REF_TYPE_PHIEU_IN:
+        return _context_phieu_in(entry.ref_id, db)
     return _empty_context()
 
 
@@ -269,6 +305,7 @@ def _to_response(entry: DefectRecord, db: Session) -> dict:
         "phap_nhan_id": ctx["phap_nhan_id"],
         "ten_khach_hang": ctx["ten_khach_hang"],
         "ly_do_tra": ctx["ly_do_tra"],
+        "ten_may": ctx.get("ten_may"),
         "production_order_id_tan_dung": entry.production_order_id_tan_dung,
         "so_lenh_tan_dung": lsx_td.so_lenh if lsx_td else None,
         "created_at": entry.created_at.isoformat() if entry.created_at else None,
@@ -341,6 +378,8 @@ def _resolve_context_for_ref(ref_type: str, ref_id: int, db: Session) -> dict:
         return _context_phoi_item(ref_id, db)
     if ref_type == REF_TYPE_SALES_RETURN_ITEM:
         return _context_sales_return_item(ref_id, db)
+    if ref_type == REF_TYPE_PHIEU_IN:
+        return _context_phieu_in(ref_id, db)
     return _empty_context()
 
 
@@ -451,7 +490,7 @@ def export_defect_records(
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    khau_label = {"tp": "Thành phẩm lỗi", "cd1": "Phôi lỗi", "tra_ve": "Hàng trả về"}.get(khau or "", "Tất cả")
+    khau_label = {"tp": "Thành phẩm lỗi", "cd1": "Phôi lỗi", "cd2": "SP lỗi CD2", "tra_ve": "Hàng trả về"}.get(khau or "", "Tất cả")
     ws.title = "Kho lỗi"
 
     # Company header
@@ -481,7 +520,7 @@ def export_defect_records(
 
     for ri, rec in enumerate(records, start=1):
         row_idx = ri + 4
-        khau_str = {"tp": "Thành phẩm", "cd1": "Phôi (CD1)", "tra_ve": "Trả về"}.get(rec["khau"] or "", rec["khau"] or "")
+        khau_str = {"tp": "Thành phẩm", "cd1": "Phôi (CD1)", "cd2": "SP CD2", "tra_ve": "Trả về"}.get(rec["khau"] or "", rec["khau"] or "")
         nguon_label = rec.get("ten_phan_xuong") or rec.get("ten_khach_hang") or ""
         tt_label = _TRANG_THAI_LABEL.get(rec["trang_thai"] or "", rec["trang_thai"] or "")
         vals = [
@@ -559,7 +598,7 @@ def print_defect_record(
     rec = _to_response(entry, db)
     so_phieu_xl = f"PXHL-{entry.id:06d}"
     tt_label = _TRANG_THAI_LABEL.get(rec["trang_thai"] or "", rec["trang_thai"] or "")
-    khau_label = {"tp": "Thành phẩm lỗi", "cd1": "Phôi lỗi (CD1)", "tra_ve": "Hàng trả về"}.get(rec["khau"] or "", rec["khau"] or "")
+    khau_label = {"tp": "Thành phẩm lỗi", "cd1": "Phôi lỗi (CD1)", "cd2": "SP lỗi CD2", "tra_ve": "Hàng trả về"}.get(rec["khau"] or "", rec["khau"] or "")
 
     ngay_str = ""
     if rec.get("ngay"):

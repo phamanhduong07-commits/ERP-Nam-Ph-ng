@@ -99,6 +99,7 @@ interface DefectRecordTraVeRow {
   so_lenh: string | null
   ten_hang: string | null
   ngay: string | null
+  ca: string | null
   dvt: string | null
   ten_khach_hang: string | null
   ly_do_tra: string | null
@@ -106,6 +107,8 @@ interface DefectRecordTraVeRow {
   ten_phap_nhan: string | null
   phan_xuong_id: number | null
   phap_nhan_id: number | null
+  so_lenh_tan_dung: string | null
+  ten_may: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -342,6 +345,12 @@ export default function KhoLoiPage() {
   const { data: khoAoPhoiData = [], isLoading: khoAoPhoiLoading } = useQuery<HangLoiPhoiRow[]>({
     queryKey: ['kho-ao-phoi', filterParams],
     queryFn: () => khoAoPhoiApi.list(filterParams).then(r => r.data),
+    staleTime: 0,
+  })
+
+  const { data: cd2LoiData = [], isLoading: cd2LoiLoading } = useQuery<DefectRecordTraVeRow[]>({
+    queryKey: ['defect-records-cd2', filterParams],
+    queryFn: () => client.get<DefectRecordTraVeRow[]>('/defect-records', { params: { khau: 'cd2', ...filterParams } }).then(r => r.data),
     staleTime: 0,
   })
 
@@ -654,6 +663,13 @@ export default function KhoLoiPage() {
             title={<Badge count={khoAoPhoiData.filter(r => r.trang_thai === 'cho_xu_ly').length} offset={[6, 0]}><span>Phôi lỗi chờ XL</span></Badge>}
             value={khoAoPhoiData.length}
             valueStyle={{ fontSize: 18, color: '#722ed1' }}
+          />
+        </Col>
+        <Col xs={12} sm={4}>
+          <Statistic
+            title={<Badge count={cd2LoiData.filter(r => r.trang_thai === 'cho_xu_ly').length} offset={[6, 0]}><span>SP lỗi CD2 chờ XL</span></Badge>}
+            value={cd2LoiData.length}
+            valueStyle={{ fontSize: 18, color: '#d4380d' }}
           />
         </Col>
         <Col xs={12} sm={4}>
@@ -1315,6 +1331,122 @@ export default function KhoLoiPage() {
                     },
                   },
                 ] as ColumnsType<HangLoiPhoiRow>}
+              />
+            ),
+          },
+          {
+            key: 'cd2-loi',
+            label: `🔴 SP lỗi CD2 (${cd2LoiData.length})`,
+            children: (
+              <Table<DefectRecordTraVeRow>
+                rowKey="id"
+                size="small"
+                loading={cd2LoiLoading}
+                dataSource={cd2LoiData}
+                pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} dòng` }}
+                scroll={{ x: 1000 }}
+                columns={[
+                  {
+                    title: 'Tên hàng',
+                    dataIndex: 'ten_hang',
+                    ellipsis: true,
+                    render: (v: string | null, r) => (
+                      <Space direction="vertical" size={0}>
+                        <Text strong style={{ fontSize: 13 }}>{v || '—'}</Text>
+                        {r.ca && <Text type="secondary" style={{ fontSize: 11 }}>Ca {r.ca} · {fmtDate(r.ngay)}</Text>}
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: 'Lệnh SX',
+                    dataIndex: 'so_lenh',
+                    width: 130,
+                    render: (v: string | null) => v ? <Text code style={{ fontSize: 12 }}>{v}</Text> : <Text type="secondary">—</Text>,
+                  },
+                  {
+                    title: 'Máy in',
+                    dataIndex: 'ten_may',
+                    width: 110,
+                    render: (v: string | null) => v ? <Tag style={{ fontSize: 11 }}>{v}</Tag> : <Text type="secondary">—</Text>,
+                  },
+                  {
+                    title: 'Xưởng',
+                    dataIndex: 'ten_phan_xuong',
+                    width: 100,
+                    render: (v: string | null) => v ? <Tag style={{ fontSize: 11 }}>{v.replace(/^Xưởng\s+/i, '')}</Tag> : <Text type="secondary">—</Text>,
+                  },
+                  {
+                    title: 'Pháp nhân',
+                    dataIndex: 'ten_phap_nhan',
+                    width: 90,
+                    render: (v: string | null) => v ? <Tag color="blue" style={{ fontSize: 11 }}>{v}</Tag> : <Text type="secondary">—</Text>,
+                  },
+                  {
+                    title: 'SL SP lỗi',
+                    dataIndex: 'so_luong',
+                    width: 100,
+                    align: 'right' as const,
+                    render: (v: number) => <Text strong style={{ color: '#d4380d' }}>{fmtN(v)} thùng</Text>,
+                  },
+                  {
+                    title: 'Trạng thái',
+                    dataIndex: 'trang_thai',
+                    width: 130,
+                    render: (v: string) => {
+                      const map: Record<string, [string, string]> = {
+                        cho_xu_ly: ['Chờ xử lý', 'red'],
+                        ban_phe: ['Bán phế phẩm', 'orange'],
+                        tan_dung: ['Tận dụng SP khác', 'blue'],
+                        da_xu_ly: ['Đã xử lý', 'green'],
+                        huy: ['Huỷ', 'default'],
+                      }
+                      const [label, color] = map[v] ?? [v, 'default']
+                      return <Tag color={color} style={{ fontSize: 11 }}>{label}</Tag>
+                    },
+                  },
+                  {
+                    title: 'LSX tận dụng',
+                    dataIndex: 'so_lenh_tan_dung',
+                    width: 120,
+                    render: (v: string | null) => v ? <Text code style={{ fontSize: 12 }}>{v}</Text> : <Text type="secondary">—</Text>,
+                  },
+                  {
+                    title: 'Thao tác',
+                    width: 160,
+                    render: (_: unknown, r: DefectRecordTraVeRow) => {
+                      if (r.trang_thai !== 'cho_xu_ly') return null
+                      return (
+                        <Space size={4}>
+                          <Tooltip title="Đánh dấu bán phế phẩm">
+                            <Button
+                              size="small"
+                              danger
+                              disabled={!canTransfer}
+                              onClick={e => {
+                                e.stopPropagation()
+                                client.patch(`/defect-records/${r.id}/trang-thai`, { trang_thai: 'ban_phe' })
+                                  .then(() => { message.success('Đã cập nhật'); queryClient.invalidateQueries({ queryKey: ['defect-records-cd2'] }) })
+                                  .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi cập nhật')))
+                              }}
+                            >Bán phế</Button>
+                          </Tooltip>
+                          <Tooltip title="Tận dụng vào sản phẩm khác">
+                            <Button
+                              size="small"
+                              disabled={!canTransfer}
+                              onClick={e => {
+                                e.stopPropagation()
+                                client.patch(`/defect-records/${r.id}/trang-thai`, { trang_thai: 'tan_dung' })
+                                  .then(() => { message.success('Đã cập nhật'); queryClient.invalidateQueries({ queryKey: ['defect-records-cd2'] }) })
+                                  .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi cập nhật')))
+                              }}
+                            >Tận dụng</Button>
+                          </Tooltip>
+                        </Space>
+                      )
+                    },
+                  },
+                ] as ColumnsType<DefectRecordTraVeRow>}
               />
             ),
           },

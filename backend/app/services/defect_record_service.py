@@ -15,6 +15,8 @@ def auto_defect_record(
     khau: str,
     so_luong: Decimal,
     created_by: Optional[int] = None,
+    phan_xuong_id: Optional[int] = None,
+    phap_nhan_id: Optional[int] = None,
 ) -> None:
     """Tạo hoặc cập nhật DefectRecord tương ứng.
 
@@ -47,5 +49,7 @@ def auto_defect_record(
             so_luong=so_luong,
             trang_thai="cho_xu_ly",
             created_by=created_by,
+            phan_xuong_id=phan_xuong_id,
+            phap_nhan_id=phap_nhan_id,
         ))
     db.flush()
