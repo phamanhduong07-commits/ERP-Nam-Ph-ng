@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Modal, Form, Input, InputNumber, DatePicker, Select, Button, Space,
   Descriptions, Tag, Divider, Popconfirm, message, Row, Col,
@@ -31,6 +31,12 @@ export default function PhieuInModal({ phieu, open, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false)
   const [showComplete, setShowComplete] = useState(false)
   const [showSauIn, setShowSauIn] = useState(false)
+
+  useEffect(() => {
+    if (showComplete && phieu) {
+      completeForm.setFieldsValue({ so_luong_in_ok: phieu.so_luong_phoi, so_luong_loi: 0 })
+    }
+  }, [showComplete, phieu])
 
   const handleCreate = async () => {
     try {
@@ -462,7 +468,18 @@ export default function PhieuInModal({ phieu, open, onClose, onSaved }: Props) {
         }
         destroyOnClose
       >
-        <Form form={completeForm} layout="vertical" style={{ marginTop: 8 }}>
+        <Form
+          form={completeForm}
+          layout="vertical"
+          style={{ marginTop: 8 }}
+          onValuesChange={(changed) => {
+            if (changed.so_luong_loi != null && phieu) {
+              completeForm.setFieldsValue({
+                so_luong_in_ok: Math.max(0, phieu.so_luong_phoi - (changed.so_luong_loi ?? 0)),
+              })
+            }
+          }}
+        >
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item name="ngay_in" label="Ngày in" initialValue={dayjs()}>

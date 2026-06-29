@@ -32,7 +32,8 @@ from app.services.defect_record_service import auto_defect_record
 router = APIRouter(prefix="/api/cd2", tags=["cd2"])
 
 VALID_STATES = {"cho_in", "ke_hoach", "dang_in", "cho_dinh_hinh", "sau_in", "dang_sau_in", "hoan_thanh"}
-SL_MAX_RATIO = Decimal("1.1")  # Số lượng đạt tối đa = 110% số lượng kế hoạch
+SL_MAX_RATIO = Decimal("1.1")  # Chỉ dùng cho nhập kho TP scan — cho phép 10% dung sai đếm
+_SL_IN_MAX_RATIO = Decimal("1.0")  # In: SL OK không được vượt quá số lượng phôi
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -1193,28 +1194,24 @@ async def start_printing(phieu_id: int, db: Session = Depends(get_db), current_u
 
 
 def _validate_so_luong_in_ok(so_luong_in_ok: Optional[Decimal], so_luong_phoi: Optional[Decimal]) -> None:
-    """Validate số lượng in OK không vượt quá 110% số lượng phôi."""
+    """SL OK không được vượt quá số lượng phôi (không có dung sai)."""
     if so_luong_in_ok is None or so_luong_phoi is None:
         return
-    limit = so_luong_phoi * SL_MAX_RATIO
-    if so_luong_in_ok > limit:
+    if so_luong_in_ok > so_luong_phoi * _SL_IN_MAX_RATIO:
         raise HTTPException(
             status_code=400,
-            detail=f"Số lượng đạt ({so_luong_in_ok}) vượt quá 110% số lượng phôi ({so_luong_phoi}). Tối đa cho phép: {
-                limit:.0f}"
+            detail=f"Số lượng đạt ({so_luong_in_ok}) vượt quá số lượng phôi ({so_luong_phoi})"
         )
 
 
 def _validate_so_luong_sau_in_ok(so_luong_sau_in_ok: Optional[Decimal], so_luong_ref: Optional[Decimal]) -> None:
-    """Validate số lượng sau in OK không vượt quá 110% tham chiếu (so_luong_in_ok ?? so_luong_phoi)."""
+    """SL sau in OK không được vượt quá tham chiếu (so_luong_in_ok ?? so_luong_phoi)."""
     if so_luong_sau_in_ok is None or so_luong_ref is None:
         return
-    limit = so_luong_ref * SL_MAX_RATIO
-    if so_luong_sau_in_ok > limit:
+    if so_luong_sau_in_ok > so_luong_ref * _SL_IN_MAX_RATIO:
         raise HTTPException(
             status_code=400,
-            detail=f"Số lượng đạt ({so_luong_sau_in_ok}) vượt quá 110% tham chiếu ({so_luong_ref}). Tối đa cho phép: {
-                limit:.0f}"
+            detail=f"Số lượng đạt ({so_luong_sau_in_ok}) vượt quá tham chiếu ({so_luong_ref})"
         )
 
 
@@ -1231,16 +1228,23 @@ async def complete_printing(
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai != "dang_in":
         raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'dang_in', hiện tại: '{p.trang_thai}'")
-    _validate_so_luong_in_ok(body.so_luong_in_ok, p.so_luong_phoi)
     p.trang_thai = "cho_dinh_hinh"
     p.may_in_id = None
     p.tam_dung_luc = None
     p.tam_dung_ly_do = None
-    for k, v in body.model_dump(exclude_none=True).items():
+    # Các trường không phải số lượng: overwrite bình thường
+    scalar_fields = {k: v for k, v in body.model_dump(exclude_none=True).items()
+                     if k not in ("so_luong_in_ok", "so_luong_loi")}
+    for k, v in scalar_fields.items():
         setattr(p, k, v)
-    if body.so_luong_in_ok and body.so_luong_in_ok > 0 and p.production_order:
+    # Lỗi tích lũy qua các lần in (trả về rồi in lại vẫn đúng)
+    if body.so_luong_loi is not None:
+        p.so_luong_loi = (p.so_luong_loi or Decimal(0)) + body.so_luong_loi
+    # OK = phôi - tổng lỗi (công thức cố định, không thể vượt phôi)
+    p.so_luong_in_ok = max(Decimal(0), (p.so_luong_phoi or Decimal(0)) - (p.so_luong_loi or Decimal(0)))
+    if p.so_luong_in_ok > 0 and p.production_order:
         poi = p.production_order.items[0] if p.production_order.items else None
-        so_phoi, so_con = _calc_phoi_con(float(body.so_luong_in_ok), poi)
+        so_phoi, so_con = _calc_phoi_con(float(p.so_luong_in_ok), poi)
         p.so_phoi_thuc_te = so_phoi
         p.so_con_thuc_te = so_con
     _log_state_change(db, p, "dang_in", "cho_dinh_hinh", "complete_printing", current_user.id)
@@ -1280,8 +1284,13 @@ async def ngung_in_tao_phieu_bu(
     p.may_in_id = None
     p.tam_dung_luc = None
     p.tam_dung_ly_do = None
-    for k, v in body.model_dump(exclude_none=True).items():
+    scalar_fields = {k: v for k, v in body.model_dump(exclude_none=True).items()
+                     if k != "so_luong_loi"}
+    for k, v in scalar_fields.items():
         setattr(p, k, v)
+    # Lỗi tích lũy qua các lần in
+    if body.so_luong_loi is not None:
+        p.so_luong_loi = (p.so_luong_loi or Decimal(0)) + body.so_luong_loi
     if p.production_order:
         poi = p.production_order.items[0] if p.production_order.items else None
         so_phoi, so_con = _calc_phoi_con(float(body.so_luong_in_ok), poi)
@@ -2649,8 +2658,27 @@ async def track_production(data: TrackPayload, db: Session = Depends(get_db),
                 # Kết thúc in → chờ định hình (KHÔNG nhảy thẳng hoan_thanh)
                 p.trang_thai = 'cho_dinh_hinh'
                 p.may_in_id = None
-                p.so_luong_in_ok = (p.so_luong_in_ok or 0) + (data.quantity_ok or 0)
+                # Lỗi tích lũy qua các lần in (trả về rồi in lại)
                 p.so_luong_loi = (p.so_luong_loi or 0) + (data.quantity_loi or 0)
+                # OK = phôi - tổng lỗi (không bao giờ cộng dồn quantity_ok)
+                p.so_luong_in_ok = max(0, float(p.so_luong_phoi or 0) - float(p.so_luong_loi or 0))
+                # Ghi nhận SP lỗi vào kho ảo hàng lỗi CD2
+                if p.so_luong_loi and p.so_luong_loi > 0:
+                    _pn_id = None
+                    if p.phan_xuong_id:
+                        from app.models.master import PhanXuong as _PX
+                        _px = db.get(_PX, p.phan_xuong_id)
+                        _pn_id = _px.phap_nhan_id if _px else None
+                    auto_defect_record(
+                        db,
+                        ref_id=p.id,
+                        ref_type="phieu_in",
+                        khau="cd2",
+                        so_luong=p.so_luong_loi,
+                        created_by=current_user.id if current_user else None,
+                        phan_xuong_id=p.phan_xuong_id,
+                        phap_nhan_id=_pn_id,
+                    )
 
     db.commit()
     if data.machine_id is not None:

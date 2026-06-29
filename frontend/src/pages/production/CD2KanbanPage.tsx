@@ -175,6 +175,13 @@ function CompleteModal({
           so_luong_setup: 0,
           so_lan_setup: 0,
         }}
+        onValuesChange={(changed) => {
+          if (changed.so_luong_loi != null) {
+            form.setFieldsValue({
+              so_luong_in_ok: Math.max(0, (phieu.so_luong_phoi ?? 0) - (changed.so_luong_loi ?? 0)),
+            })
+          }
+        }}
       >
         <Row gutter={12}>
           <Col span={12}>
