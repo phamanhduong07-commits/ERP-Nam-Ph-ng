@@ -702,6 +702,14 @@ def ton_kho_lsx(
     )
     active_map = {p.production_order_id: {"so_phieu": p.so_phieu, "trang_thai": p.trang_thai} for p in active_phieus}
 
+    # so_dao từ production_plan_lines — để tính con_nho = tong_nhap_tam × so_dao
+    from app.models.production_plan import ProductionPlanLine
+    poi_ids = [item.id for o in orders for item in o.items]
+    plan_lines = db.query(ProductionPlanLine).filter(
+        ProductionPlanLine.production_order_item_id.in_(poi_ids)
+    ).all() if poi_ids else []
+    so_dao_map = {pl.production_order_item_id: pl.so_dao for pl in plan_lines}
+
     result = []
     for (order_id, wh_id), data in stats.items():
         order = order_map.get(order_id)
@@ -762,7 +770,7 @@ def ton_kho_lsx(
             "ten_kho": wh.ten_kho,
             "chieu_kho": data["chieu_kho"],
             "chieu_cat": data["chieu_cat"],
-            "tong_con": round(data.get("con", 0.0)),
+            "tong_con": round((data["nhap"] + data["chuyen_den"]) * (so_dao_map.get(first.id) or 0)) if first else 0,
             "dien_tich": float(phoi_area),
             "trong_luong": float(trong_luong),
             "the_tich": float(the_tich),
