@@ -30,6 +30,7 @@ class PhieuNhapPhoiSong(Base):
     phoi_du_trang_thai: Mapped[str | None] = mapped_column(String(30), nullable=True)
     # NULL=chưa xử lý | 'da_nhap_kho_tan_dung' | 'giao_sx' | 'giao_khach' | 'huy'
     phoi_du_ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phoi_du_so_luong: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

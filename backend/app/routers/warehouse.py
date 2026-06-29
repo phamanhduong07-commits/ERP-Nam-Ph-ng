@@ -779,6 +779,103 @@ def get_ton_kho(
     return result
 
 
+@router.get("/ton-kho-tan-dung")
+def get_ton_kho_tan_dung(
+    phan_xuong_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Tồn kho phôi tận dụng — có thêm thông tin sóng giấy và định lượng từ LSX gốc."""
+    q = (
+        db.query(InventoryBalance, Warehouse, PhanXuong)
+        .join(Warehouse, Warehouse.id == InventoryBalance.warehouse_id)
+        .outerjoin(PhanXuong, PhanXuong.id == Warehouse.phan_xuong_id)
+        .filter(Warehouse.loai_kho == "TAN_DUNG", InventoryBalance.ton_luong > 0)
+    )
+    if phan_xuong_id:
+        q = q.filter(Warehouse.phan_xuong_id == phan_xuong_id)
+    rows = q.all()
+
+    if not rows:
+        return []
+
+    wh_ids = list({wh.id for _, wh, _ in rows})
+
+    # Lấy ProductionOrderItem từ phiếu nhập phôi dư gần nhất per kho
+    recent_tx_sub = (
+        db.query(
+            InventoryTransaction.warehouse_id,
+            func.max(InventoryTransaction.id).label("max_id"),
+        )
+        .filter(
+            InventoryTransaction.loai_giao_dich == "NHAP_PHOI_DU",
+            InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song",
+            InventoryTransaction.warehouse_id.in_(wh_ids),
+        )
+        .group_by(InventoryTransaction.warehouse_id)
+        .subquery()
+    )
+
+    song_rows = (
+        db.query(
+            InventoryTransaction.warehouse_id,
+            ProductionOrderItem.so_lop,
+            ProductionOrderItem.to_hop_song,
+            ProductionOrderItem.mat_dl,
+            ProductionOrderItem.song_1_dl,
+            ProductionOrderItem.mat_1_dl,
+            ProductionOrderItem.song_2_dl,
+            ProductionOrderItem.mat_2_dl,
+            ProductionOrderItem.song_3_dl,
+            ProductionOrderItem.mat_3_dl,
+        )
+        .join(recent_tx_sub, and_(
+            InventoryTransaction.warehouse_id == recent_tx_sub.c.warehouse_id,
+            InventoryTransaction.id == recent_tx_sub.c.max_id,
+        ))
+        .join(PhieuNhapPhoiSong, and_(
+            InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song",
+            InventoryTransaction.chung_tu_id == PhieuNhapPhoiSong.id,
+        ))
+        .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
+        .join(ProductionOrderItem, ProductionOrderItem.id == PhieuNhapPhoiSongItem.production_order_item_id)
+        .all()
+    )
+
+    # Khi có nhiều items/phiếu → lấy dòng đầu tiên per warehouse
+    song_map: dict[int, dict] = {}
+    for s in song_rows:
+        if s.warehouse_id not in song_map:
+            song_map[s.warehouse_id] = {
+                "so_lop": s.so_lop,
+                "to_hop_song": s.to_hop_song,
+                "mat_dl": float(s.mat_dl) if s.mat_dl else None,
+                "song_1_dl": float(s.song_1_dl) if s.song_1_dl else None,
+                "mat_1_dl": float(s.mat_1_dl) if s.mat_1_dl else None,
+                "song_2_dl": float(s.song_2_dl) if s.song_2_dl else None,
+                "mat_2_dl": float(s.mat_2_dl) if s.mat_2_dl else None,
+                "song_3_dl": float(s.song_3_dl) if s.song_3_dl else None,
+                "mat_3_dl": float(s.mat_3_dl) if s.mat_3_dl else None,
+            }
+
+    result = []
+    for bal, wh, px in rows:
+        song = song_map.get(wh.id, {})
+        result.append({
+            "id": bal.id,
+            "warehouse_id": wh.id,
+            "ten_kho": wh.ten_kho,
+            "phan_xuong_id": wh.phan_xuong_id,
+            "ten_phan_xuong": px.ten_xuong if px else None,
+            "ten_hang": bal.ten_hang,
+            "don_vi": bal.don_vi or "Tấm",
+            "ton_luong": float(bal.ton_luong),
+            "cap_nhat_luc": bal.cap_nhat_luc.isoformat() if bal.cap_nhat_luc else None,
+            **song,
+        })
+    return result
+
+
 @router.get("/ton-kho/summary")
 def get_ton_kho_summary(
     db: Session = Depends(get_db),

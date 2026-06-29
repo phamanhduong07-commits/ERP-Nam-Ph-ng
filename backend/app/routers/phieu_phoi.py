@@ -24,6 +24,7 @@ from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSong
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
 from app.models.phieu_tra_hang import PhieuTraHang, PhieuTraHangItem
 from app.models.warehouse_doc import PhieuChuyenKho, PhieuChuyenKhoItem
+from app.models.inventory import InventoryTransaction
 from app.services.carton_metrics import dec_or_zero, _to_hop_song, song_take_up, standard_thickness_m
 
 _log = logging.getLogger("erp")
@@ -567,6 +568,26 @@ def ton_kho_lsx(
         PhieuTraHang.production_order_id, PhieuTraHang.warehouse_id
     ).all()
 
+    # 5b. Phôi đã đẩy sang kho tận dụng — query từ InventoryTransaction
+    tan_dung_q = (
+        db.query(
+            PhieuNhapPhoiSong.production_order_id,
+            PhieuNhapPhoiSong.warehouse_id,
+            func.coalesce(func.sum(InventoryTransaction.so_luong), 0).label("tong_tan_dung"),
+        )
+        .join(
+            InventoryTransaction,
+            (InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song")
+            & (InventoryTransaction.chung_tu_id == PhieuNhapPhoiSong.id)
+            & (InventoryTransaction.loai_giao_dich == "NHAP_PHOI_DU"),
+        )
+    )
+    if allowed_order_ids is not None:
+        tan_dung_q = tan_dung_q.filter(PhieuNhapPhoiSong.production_order_id.in_(allowed_order_ids))
+    tan_dung_rows = tan_dung_q.group_by(
+        PhieuNhapPhoiSong.production_order_id, PhieuNhapPhoiSong.warehouse_id
+    ).all()
+
     # 4. Gom tất cả tổ hợp (LSX, Kho) có phát sinh
     stats = {}  # (order_id, wh_id) -> data
 
@@ -604,6 +625,13 @@ def ton_kho_lsx(
                          "chuyen_den": 0.0, "tra_khach": 0.0, "chieu_kho": None, "chieu_cat": None})
         stats[key].setdefault("tra_khach", 0.0)
         stats[key]["tra_khach"] += float(r.tong_tra)
+
+    for r in tan_dung_rows:
+        key = (r.production_order_id, r.warehouse_id)
+        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0,
+                         "chuyen_den": 0.0, "tan_dung": 0.0, "chieu_kho": None, "chieu_cat": None})
+        stats[key].setdefault("tan_dung", 0.0)
+        stats[key]["tan_dung"] += float(r.tong_tan_dung)
 
     if not stats:
         return []
@@ -651,9 +679,10 @@ def ton_kho_lsx(
         if not order or not wh:
             continue
 
-        # Tồn = (Nhập SX + Nhập Chuyển + Trả KH tốt) - (Xuất SX + Xuất Chuyển)
+        # Tồn = (Nhập SX + Nhập Chuyển + Trả KH tốt) - (Xuất SX + Xuất Chuyển + Tận dụng)
         tra_khach = data.get("tra_khach", 0.0)
-        ton_kho = round((data["nhap"] + data["chuyen_den"] + tra_khach) - (data["xuat"] + data["chuyen_di"]), 3)
+        tan_dung  = data.get("tan_dung", 0.0)
+        ton_kho = round((data["nhap"] + data["chuyen_den"] + tra_khach) - (data["xuat"] + data["chuyen_di"] + tan_dung), 3)
 
         # Nếu tồn <= 0 và không có nhập thì bỏ qua
         if ton_kho <= 0 and (data["nhap"] + data["chuyen_den"] + tra_khach) == 0:

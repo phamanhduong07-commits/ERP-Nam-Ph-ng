@@ -882,6 +882,7 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
         "gio_ket_thuc": p.gio_ket_thuc,
         "phoi_du_trang_thai": p.phoi_du_trang_thai,
         "phoi_du_ghi_chu": p.phoi_du_ghi_chu,
+        "phoi_du_so_luong": float(p.phoi_du_so_luong) if p.phoi_du_so_luong is not None else None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "items": [
             {
@@ -1305,7 +1306,10 @@ def xu_ly_phoi_du(
     """Đánh dấu xử lý phôi dư — nếu loai_xu_ly='da_nhap_kho_tan_dung' thì cập nhật tồn kho TAN_DUNG."""
     phieu = (
         db.query(PhieuNhapPhoiSong)
-        .options(joinedload(PhieuNhapPhoiSong.production_order))
+        .options(
+            joinedload(PhieuNhapPhoiSong.production_order),
+            joinedload(PhieuNhapPhoiSong.items),
+        )
         .filter(PhieuNhapPhoiSong.id == phieu_id)
         .first()
     )
@@ -1319,24 +1323,40 @@ def xu_ly_phoi_du(
         phan_xuong_id = order.phan_xuong_id if order else None
         if not phan_xuong_id:
             raise HTTPException(status_code=400, detail="Lệnh SX chưa gắn xưởng.")
-        kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
         from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
         item0 = phieu.items[0] if phieu.items else None
         if item0 and item0.chieu_kho and item0.chieu_cat:
             ten_hang = f"{int(item0.chieu_kho)}x{int(item0.chieu_cat)}"
         else:
             ten_hang = "Phôi dư"
-        balance = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
-        nhap_balance(balance, so_luong, Decimal("0"))
+
+        # Nhập vào kho TAN_DUNG — kho PHOI không dùng InventoryBalance, tồn được trừ qua /ton-kho-lsx
+        kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
+        bal_td = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
+        nhap_balance(bal_td, so_luong, Decimal("0"))
         log_tx(
             db, kho_td.id, "NHAP_PHOI_DU", so_luong, Decimal("0"),
-            balance.ton_luong, "phieu_nhap_phoi_song", phieu_id,
+            bal_td.ton_luong, "phieu_nhap_phoi_song", phieu_id,
             created_by=current_user.id,
             ghi_chu=data.ghi_chu,
         )
 
-    phieu.phoi_du_trang_thai = data.loai_xu_ly
+    # Tích lũy số lượng đã xử lý
+    old_processed = Decimal(str(phieu.phoi_du_so_luong or 0))
+    new_processed = old_processed + so_luong
+    phieu.phoi_du_so_luong = new_processed
     phieu.phoi_du_ghi_chu = data.ghi_chu
+
+    # Tính tổng phôi dư để biết còn bao nhiêu chưa xử lý
+    total_tt = sum(Decimal(str(it.so_luong_thuc_te or 0)) for it in phieu.items)
+    total_kh = sum(Decimal(str(it.so_luong_ke_hoach)) for it in phieu.items)
+    total_excess = total_tt - total_kh
+    remaining = total_excess - new_processed
+
+    # Chỉ đánh dấu hoàn tất khi đã xử lý hết
+    if remaining <= Decimal("0.001"):
+        phieu.phoi_du_trang_thai = data.loai_xu_ly
+
     db.commit()
     db.refresh(phieu)
     return _phieu_to_dict(phieu)

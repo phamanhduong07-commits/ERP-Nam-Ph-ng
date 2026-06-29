@@ -878,9 +878,8 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     </div>
                   </td>
 
-                  {/* Số LSX + STT nhỏ + ngày chạy */}
+                  {/* Số LSX + ngày chạy */}
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>
-                    {r.thu_tu > 0 && <div style={{ fontSize: 10, lineHeight: 1 }}>{r.thu_tu}</div>}
                     <div style={{ fontSize: 13 }}>{r.so_lenh || '—'}</div>
                     {r.ngay_chay && (
                       <div style={{ fontSize: 11, marginTop: 1 }}>

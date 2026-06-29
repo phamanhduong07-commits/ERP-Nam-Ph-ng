@@ -53,6 +53,28 @@ export interface TonKho {
   ngay_nhap_gan_nhat?: string | null
 }
 
+export interface TonKhoTanDungRow {
+  id: number
+  warehouse_id: number
+  ten_kho: string | null
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  ten_hang: string | null
+  don_vi: string
+  ton_luong: number
+  cap_nhat_luc: string | null
+  // Song info from source LSX
+  so_lop: number | null
+  to_hop_song: string | null
+  mat_dl: number | null
+  song_1_dl: number | null
+  mat_1_dl: number | null
+  song_2_dl: number | null
+  mat_2_dl: number | null
+  song_3_dl: number | null
+  mat_3_dl: number | null
+}
+
 export interface TonKhoSummary {
   total_gia_tri: number
   total_mat_hang: number
@@ -819,6 +841,8 @@ export const warehouseApi = {
   // Tồn kho
   getTonKho: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; loai?: string; loai_kho?: string; search?: string; show_zero?: boolean }) =>
     client.get<TonKho[]>('/warehouse/ton-kho', { params }),
+  getTonKhoTanDung: (params?: { phan_xuong_id?: number }) =>
+    client.get<TonKhoTanDungRow[]>('/warehouse/ton-kho-tan-dung', { params }),
   getTonKhoSummary: () => client.get<TonKhoSummary>('/warehouse/ton-kho/summary'),
   snapshotTonKho: () => client.post<{ snapped: number }>('/warehouse/ton-kho/snapshot'),
 

@@ -910,6 +910,8 @@ export default function MaySongPage() {
   const [inTemLoading, setInTemLoading] = useState(false)
   const [histTuNgay, setHistTuNgay]     = useState<string | null>(null)
   const [histDenNgay, setHistDenNgay]   = useState<string | null>(null)
+  const [editPhieu, setEditPhieu]       = useState<PhieuNhapPhoiSongListItem | null>(null)
+  const [editPhieuForm] = Form.useForm()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [newSessionName, setNewSessionName] = useState('')
   const [histFilterCa, setHistFilterCa]   = useState<string | undefined>()
@@ -932,6 +934,7 @@ export default function MaySongPage() {
   } | null>(null)
   const [xuLyLoaiXuLy, setXuLyLoaiXuLy] = useState<string>('da_nhap_kho_tan_dung')
   const [xuLyGhiChu, setXuLyGhiChu] = useState<string>('')
+  const [xuLySoLuong, setXuLySoLuong] = useState<number>(0)
   const qc = useQueryClient()
 
   // ─── Queries ───────────────────────────────────────────────────────────────
@@ -1073,12 +1076,14 @@ export default function MaySongPage() {
     return phoiDuPhieuList
       .map(p => {
         const slKh = p.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
-        const slTt  = Number(p.tong_so_luong_thuc_te)
-        const excess = Math.round((slTt - slKh) * 1000) / 1000
-        return { phieu: p, slKh, slTt, excess }
+        const slTt      = Number(p.tong_so_luong_thuc_te)
+        const excess    = Math.round((slTt - slKh) * 1000) / 1000
+        const processed = Math.round((p.phoi_du_so_luong ?? 0) * 1000) / 1000
+        const remaining = Math.round((excess - processed) * 1000) / 1000
+        return { phieu: p, slKh, slTt, excess, processed, remaining }
       })
       .filter(r => r.excess > 0.001)
-      .filter(r => phoiDuShowAll || !r.phieu.phoi_du_trang_thai)
+      .filter(r => phoiDuShowAll || r.remaining > 0.001)
       .sort((a, b) => b.phieu.ngay.localeCompare(a.phieu.ngay))
   }, [phoiDuPhieuList, phoiDuShowAll])
 
@@ -1314,6 +1319,20 @@ export default function MaySongPage() {
     },
     onError: (e: unknown) => message.error(
       (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? 'Lỗi xử lý phôi dư'
+    ),
+  })
+
+  const updatePhieuMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof productionOrdersApi.updatePhieuNhap>[1] }) =>
+      productionOrdersApi.updatePhieuNhap(id, data),
+    onSuccess: () => {
+      message.success('Đã cập nhật phiếu nhập')
+      qc.invalidateQueries({ queryKey: ['all-phieu'] })
+      setEditPhieu(null)
+      editPhieuForm.resetFields()
+    },
+    onError: (e: unknown) => message.error(
+      (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? 'Lỗi cập nhật phiếu'
     ),
   })
 
@@ -1651,6 +1670,32 @@ export default function MaySongPage() {
       },
     },
     { title: 'Người tạo', dataIndex: 'created_by_name', render: (v: string | null) => v ?? '—' },
+    {
+      key: 'actions',
+      title: '',
+      width: 60,
+      fixed: 'right' as const,
+      render: (_: unknown, r: PhieuNhapPhoiSongListItem) => (
+        <Button size="small" onClick={() => {
+          setEditPhieu(r)
+          editPhieuForm.setFieldsValue({
+            ngay: dayjs(r.ngay),
+            ca: r.ca,
+            gio_bat_dau: r.gio_bat_dau ? dayjs(r.gio_bat_dau, 'HH:mm') : null,
+            gio_ket_thuc: r.gio_ket_thuc ? dayjs(r.gio_ket_thuc, 'HH:mm') : null,
+            ghi_chu: r.ghi_chu,
+            items: r.items.map(it => ({
+              id: it.id,
+              so_luong_thuc_te: it.so_luong_thuc_te,
+              so_luong_loi: it.so_luong_loi,
+              chieu_kho: it.chieu_kho,
+              chieu_cat: it.chieu_cat,
+              so_tam: it.so_tam,
+            })),
+          })
+        }}>Sửa</Button>
+      ),
+    },
   ]
 
   const { displayColumns: displayPhieuCols, settingsButton: settingsButtonLichSu } =
@@ -2377,12 +2422,25 @@ export default function MaySongPage() {
                         {
                           key: 'excess',
                           title: 'Dư',
-                          width: 90,
+                          width: 100,
                           align: 'right',
                           render: (_, r) => (
-                            <Text strong style={{ color: '#E65100', fontSize: 14 }}>
-                              +{r.excess.toLocaleString('vi-VN')}
-                            </Text>
+                            <Tooltip
+                              title={r.processed > 0
+                                ? `Dư gốc: ${r.excess.toLocaleString('vi-VN')} · Đã xử lý: ${r.processed.toLocaleString('vi-VN')}`
+                                : undefined}
+                            >
+                              <div>
+                                <Text strong style={{ color: '#E65100', fontSize: 14 }}>
+                                  +{r.remaining.toLocaleString('vi-VN')}
+                                </Text>
+                                {r.processed > 0 && (
+                                  <div style={{ fontSize: 11, color: '#aaa', lineHeight: 1.2 }}>
+                                    ({r.processed.toLocaleString('vi-VN')} đã xử lý)
+                                  </div>
+                                )}
+                              </div>
+                            </Tooltip>
                           ),
                         },
                         {
@@ -2417,19 +2475,20 @@ export default function MaySongPage() {
                                 size="small"
                                 icon={<PrinterOutlined />}
                                 loading={phoiDuPrintLoading}
-                                onClick={() => handlePhoiDuOpenPrint(r.phieu, r.excess)}
+                                onClick={() => handlePhoiDuOpenPrint(r.phieu, r.remaining > 0 ? r.remaining : r.excess)}
                                 style={{ borderColor: '#E65100', color: '#E65100' }}
                               >
                                 In tem
                               </Button>
-                              {!r.phieu.phoi_du_trang_thai && (
+                              {r.remaining > 0.001 && (
                                 <Button
                                   size="small"
                                   type="primary"
                                   onClick={() => {
-                                    setPhoiDuXuLyModal({ phieu: r.phieu, excessQty: r.excess })
+                                    setPhoiDuXuLyModal({ phieu: r.phieu, excessQty: r.remaining })
                                     setXuLyLoaiXuLy('da_nhap_kho_tan_dung')
                                     setXuLyGhiChu('')
+                                    setXuLySoLuong(r.remaining)
                                   }}
                                 >
                                   Xử lý
@@ -2557,10 +2616,12 @@ export default function MaySongPage() {
         onOk={() => {
           const modal = phoiDuXuLyModal
           if (!modal) return
+          if (!xuLySoLuong || xuLySoLuong <= 0) { message.warning('Nhập số lượng xử lý'); return }
+          if (xuLySoLuong > modal.excessQty) { message.warning(`Số lượng không được vượt quá ${modal.excessQty}`); return }
           if (!xuLyGhiChu.trim()) { message.warning('Nhập ghi chú xử lý'); return }
           xuLyPhoiDuMut.mutate({
             phieuId: modal.phieu.id,
-            data: { so_luong_du: modal.excessQty, loai_xu_ly: xuLyLoaiXuLy, ghi_chu: xuLyGhiChu.trim() },
+            data: { so_luong_du: xuLySoLuong, loai_xu_ly: xuLyLoaiXuLy, ghi_chu: xuLyGhiChu.trim() },
           })
         }}
         okText="Xác nhận"
@@ -2572,7 +2633,7 @@ export default function MaySongPage() {
           <div style={{ paddingTop: 8 }}>
             <Row style={{ marginBottom: 12 }}>
               <Col span={12}>
-                <Text type="secondary" style={{ fontSize: 11 }}>Số dư</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Còn lại cần xử lý</Text>
                 <div>
                   <Text strong style={{ fontSize: 20, color: '#E65100' }}>
                     +{phoiDuXuLyModal.excessQty.toLocaleString('vi-VN')}
@@ -2587,6 +2648,23 @@ export default function MaySongPage() {
                 </Text></div>
               </Col>
             </Row>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 4, fontWeight: 600 }}>Số lượng xử lý <Text type="danger">*</Text></div>
+              <InputNumber
+                value={xuLySoLuong}
+                onChange={v => setXuLySoLuong(v ?? 0)}
+                min={1}
+                max={phoiDuXuLyModal.excessQty}
+                style={{ width: '100%' }}
+                addonAfter="phôi"
+                addonBefore={
+                  <span
+                    style={{ cursor: 'pointer', color: '#1677ff', fontSize: 12 }}
+                    onClick={() => setXuLySoLuong(phoiDuXuLyModal.excessQty)}
+                  >Tất cả</span>
+                }
+              />
+            </div>
             <div style={{ marginBottom: 12 }}>
               <div style={{ marginBottom: 6, fontWeight: 600 }}>Xử lý như thế nào?</div>
               <Radio.Group
@@ -2643,6 +2721,107 @@ export default function MaySongPage() {
           }}
           autoFocus
         />
+      </Modal>
+
+      {/* ── Modal sửa phiếu nhập ── */}
+      <Modal
+        open={!!editPhieu}
+        title={`Sửa phiếu ${editPhieu?.so_phieu ?? ''}`}
+        onCancel={() => { setEditPhieu(null); editPhieuForm.resetFields() }}
+        onOk={() => {
+          editPhieuForm.validateFields().then(vals => {
+            if (!editPhieu) return
+            updatePhieuMut.mutate({
+              id: editPhieu.id,
+              data: {
+                ngay: (vals.ngay as dayjs.Dayjs).format('YYYY-MM-DD'),
+                ca: vals.ca ?? null,
+                gio_bat_dau: vals.gio_bat_dau ? (vals.gio_bat_dau as dayjs.Dayjs).format('HH:mm') : null,
+                gio_ket_thuc: vals.gio_ket_thuc ? (vals.gio_ket_thuc as dayjs.Dayjs).format('HH:mm') : null,
+                ghi_chu: vals.ghi_chu ?? null,
+                items: (vals.items as { id: number; so_luong_thuc_te: number | null; so_luong_loi: number | null; chieu_kho: number | null; chieu_cat: number | null; so_tam: number | null }[])?.map(it => ({
+                  id: it.id,
+                  so_luong_thuc_te: it.so_luong_thuc_te,
+                  so_luong_loi: it.so_luong_loi,
+                  chieu_kho: it.chieu_kho,
+                  chieu_cat: it.chieu_cat,
+                  so_tam: it.so_tam,
+                })),
+              },
+            })
+          })
+        }}
+        confirmLoading={updatePhieuMut.isPending}
+        width={680}
+      >
+        {editPhieu && (
+          <Form form={editPhieuForm} layout="vertical" size="small">
+            <Row gutter={12}>
+              <Col span={8}>
+                <Form.Item name="ngay" label="Ngày" rules={[{ required: true }]}>
+                  <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="ca" label="Ca">
+                  <Select allowClear placeholder="Chọn ca" options={['Ca 1','Ca 2','Ca 3','Ca đêm'].map(c => ({ value: c, label: c }))} />
+                </Form.Item>
+              </Col>
+              <Col span={4}>
+                <Form.Item name="gio_bat_dau" label="Giờ BĐ">
+                  <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={4}>
+                <Form.Item name="gio_ket_thuc" label="Giờ KT">
+                  <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item name="ghi_chu" label="Ghi chú">
+              <Input.TextArea rows={2} />
+            </Form.Item>
+            <Divider style={{ margin: '8px 0' }}>Chi tiết sản phẩm</Divider>
+            <Form.List name="items">
+              {(fields) => fields.map(field => {
+                const item = editPhieu.items[field.name]
+                return (
+                  <div key={field.key} style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6, padding: '8px 10px', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13 }}>{item?.ten_hang ?? `Item #${field.name + 1}`}</div>
+                    <Form.Item name={[field.name, 'id']} hidden><Input /></Form.Item>
+                    <Row gutter={8}>
+                      <Col span={6}>
+                        <Form.Item name={[field.name, 'so_luong_thuc_te']} label="SL thực tế">
+                          <InputNumber style={{ width: '100%' }} min={0} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={6}>
+                        <Form.Item name={[field.name, 'so_luong_loi']} label="Phôi lỗi">
+                          <InputNumber style={{ width: '100%' }} min={0} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={4}>
+                        <Form.Item name={[field.name, 'chieu_kho']} label="Khổ (cm)">
+                          <InputNumber style={{ width: '100%' }} min={0} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={4}>
+                        <Form.Item name={[field.name, 'chieu_cat']} label="Cắt (cm)">
+                          <InputNumber style={{ width: '100%' }} min={0} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={4}>
+                        <Form.Item name={[field.name, 'so_tam']} label="Số tấm">
+                          <InputNumber style={{ width: '100%' }} min={0} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  </div>
+                )
+              })}
+            </Form.List>
+          </Form>
+        )}
       </Modal>
     </div>
   )

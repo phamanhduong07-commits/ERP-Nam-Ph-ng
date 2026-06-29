@@ -277,6 +277,7 @@ export interface PhieuNhapPhoiSongListItem extends PhieuNhapPhoiSong {
   session_id: number | null
   phoi_du_trang_thai: string | null
   phoi_du_ghi_chu: string | null
+  phoi_du_so_luong: number | null
   phan_xuong_id: number | null
 }
 
@@ -365,6 +366,16 @@ export const productionOrdersApi = {
 
   nhapPhoiDuKho: (phieuId: number, data: { so_luong_du: number; loai_xu_ly: string; ghi_chu?: string }) =>
     client.post<PhieuNhapPhoiSongListItem>(`/production-orders/phieu/${phieuId}/nhap-phoi-du-kho`, data),
+
+  updatePhieuNhap: (phieuId: number, data: {
+    ngay?: string
+    ca?: string | null
+    gio_bat_dau?: string | null
+    gio_ket_thuc?: string | null
+    ghi_chu?: string | null
+    items?: { id: number; so_luong_thuc_te?: number | null; so_luong_loi?: number | null; chieu_kho?: number | null; chieu_cat?: number | null; so_tam?: number | null; ghi_chu?: string | null }[]
+  }) =>
+    client.patch<PhieuNhapPhoiSong>(`/phieu-phoi/nhap/${phieuId}`, data),
 
   printHtml: (orderId: number) =>
     client.get<string>(`/production-orders/${orderId}/print`, { responseType: 'text' }),

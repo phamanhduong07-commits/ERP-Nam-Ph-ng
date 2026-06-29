@@ -17,7 +17,7 @@ import { TRANG_THAI_LABELS as CD2_LABELS } from '../../api/cd2'
 import { warehousesApi } from '../../api/warehouses'
 import type { Warehouse } from '../../api/warehouses'
 import { warehouseApi } from '../../api/warehouse'
-import type { TonKho, PhanXuong } from '../../api/warehouse'
+import type { TonKho, TonKhoTanDungRow, PhanXuong } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
@@ -86,9 +86,9 @@ export default function KhoPhoiPage() {
   })
 
   // Tận Dụng kho query
-  const { data: tanDungRows = [], isLoading: tdLoading, refetch: tdRefetch } = useQuery<TonKho[]>({
+  const { data: tanDungRows = [], isLoading: tdLoading, refetch: tdRefetch } = useQuery<TonKhoTanDungRow[]>({
     queryKey: ['ton-kho-tan-dung', tdPhanXuong],
-    queryFn: () => warehouseApi.getTonKho({ loai_kho: 'TAN_DUNG', phan_xuong_id: tdPhanXuong }).then(r => r.data),
+    queryFn: () => warehouseApi.getTonKhoTanDung({ phan_xuong_id: tdPhanXuong }).then(r => r.data),
     enabled: mainTab === 'tan_dung',
     staleTime: 0,
   })
@@ -536,24 +536,18 @@ export default function KhoPhoiPage() {
               description="Phôi dư và phôi lỗi được đánh dấu 'Nhập kho tận dụng' sẽ xuất hiện ở đây"
             />
           ) : (
-            <Table<TonKho>
+            <Table<TonKhoTanDungRow>
               rowKey="id"
               size="small"
               dataSource={tanDungRows}
               pagination={false}
-              scroll={{ x: 600 }}
+              scroll={{ x: 800 }}
               columns={[
                 {
                   title: 'Xưởng',
                   dataIndex: 'ten_phan_xuong',
-                  width: 140,
+                  width: 130,
                   render: (v: string | null) => v ?? <Text type="secondary">—</Text>,
-                },
-                {
-                  title: 'Kho',
-                  dataIndex: 'ten_kho',
-                  width: 200,
-                  render: (v: string) => <Text style={{ fontSize: 12 }}>{v}</Text>,
                 },
                 {
                   title: 'Kích thước (Khổ × Cắt)',
@@ -563,12 +557,42 @@ export default function KhoPhoiPage() {
                   ),
                 },
                 {
+                  title: 'Sóng giấy',
+                  width: 100,
+                  render: (_: unknown, r: TonKhoTanDungRow) => {
+                    if (!r.so_lop && !r.to_hop_song) return <Text type="secondary">—</Text>
+                    return (
+                      <Space size={4}>
+                        {r.so_lop && <Tag color="blue" style={{ margin: 0 }}>{r.so_lop}L</Tag>}
+                        {r.to_hop_song && <Text style={{ fontSize: 12 }}>{r.to_hop_song}</Text>}
+                      </Space>
+                    )
+                  },
+                },
+                {
+                  title: 'Định lượng (g/m²)',
+                  width: 150,
+                  render: (_: unknown, r: TonKhoTanDungRow) => {
+                    const dls: (number | null | undefined)[] = [
+                      r.mat_dl, r.song_1_dl, r.mat_1_dl,
+                      r.song_2_dl, r.mat_2_dl,
+                      r.song_3_dl, r.mat_3_dl,
+                    ].filter(v => v != null && v > 0)
+                    if (dls.length === 0) return <Text type="secondary">—</Text>
+                    return (
+                      <Text style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                        {dls.map(v => v!.toFixed(0)).join('/')}
+                      </Text>
+                    )
+                  },
+                },
+                {
                   title: 'Tồn kho',
                   dataIndex: 'ton_luong',
                   width: 110,
                   align: 'right' as const,
-                  sorter: (a: TonKho, b: TonKho) => a.ton_luong - b.ton_luong,
-                  render: (v: number, r: TonKho) => (
+                  sorter: (a: TonKhoTanDungRow, b: TonKhoTanDungRow) => a.ton_luong - b.ton_luong,
+                  render: (v: number, r: TonKhoTanDungRow) => (
                     <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
                       <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 13 }}>
                         {fmtN(v)}
@@ -588,15 +612,15 @@ export default function KhoPhoiPage() {
               ]}
               summary={() => tanDungRows.length > 0 ? (
                 <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={3}>
+                  <Table.Summary.Cell index={0} colSpan={4}>
                     <Text strong style={{ fontSize: 12 }}>Tổng ({tanDungRows.length} loại phôi)</Text>
                   </Table.Summary.Cell>
-                  <Table.Summary.Cell index={3} align="right">
+                  <Table.Summary.Cell index={4} align="right">
                     <Text strong style={{ color: '#389e0d', fontSize: 12 }}>
                       {fmtN(tanDungRows.reduce((s, r) => s + r.ton_luong, 0))} tấm
                     </Text>
                   </Table.Summary.Cell>
-                  <Table.Summary.Cell index={4} />
+                  <Table.Summary.Cell index={5} />
                 </Table.Summary.Row>
               ) : null}
             />
