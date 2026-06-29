@@ -491,6 +491,8 @@ def ton_kho_lsx(
             PhieuNhapPhoiSong.production_order_id,
             PhieuNhapPhoiSong.warehouse_id,
             func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_tam), 0).label("tong_nhap_sx"),
+            func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0).label("tong_con_thuc_te"),
+            func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_loi), 0).label("tong_con_loi"),
             func.max(PhieuNhapPhoiSongItem.chieu_kho).label("chieu_kho"),
             func.max(PhieuNhapPhoiSongItem.chieu_cat).label("chieu_cat"),
             func.min(PhieuNhapPhoiSong.ngay).label("ngay_nhap_kho"),
@@ -614,8 +616,9 @@ def ton_kho_lsx(
     for r in nhap_rows:
         key = (r.production_order_id, r.warehouse_id)
         stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0, "chuyen_den": 0.0,
-                         "chieu_kho": r.chieu_kho, "chieu_cat": r.chieu_cat, "ngay_nhap_kho": None})
+                         "chieu_kho": r.chieu_kho, "chieu_cat": r.chieu_cat, "ngay_nhap_kho": None, "con": 0.0})
         stats[key]["nhap"] += float(r.tong_nhap_sx)
+        stats[key]["con"] = stats[key].get("con", 0.0) + max(0.0, float(r.tong_con_thuc_te) - float(r.tong_con_loi))
         if r.ngay_nhap_kho:
             cur = stats[key].get("ngay_nhap_kho")
             if cur is None or r.ngay_nhap_kho < cur:
@@ -699,14 +702,6 @@ def ton_kho_lsx(
     )
     active_map = {p.production_order_id: {"so_phieu": p.so_phieu, "trang_thai": p.trang_thai} for p in active_phieus}
 
-    # Lấy so_dao từ production_plan_lines theo POI id
-    from app.models.production_plan import ProductionPlanLine
-    poi_ids = [item.id for o in orders for item in o.items]
-    plan_lines = db.query(ProductionPlanLine).filter(
-        ProductionPlanLine.production_order_item_id.in_(poi_ids)
-    ).all() if poi_ids else []
-    so_dao_map = {pl.production_order_item_id: pl.so_dao for pl in plan_lines}
-
     result = []
     for (order_id, wh_id), data in stats.items():
         order = order_map.get(order_id)
@@ -767,8 +762,7 @@ def ton_kho_lsx(
             "ten_kho": wh.ten_kho,
             "chieu_kho": data["chieu_kho"],
             "chieu_cat": data["chieu_cat"],
-            "be_so_con": first.be_so_con if first else None,
-            "so_dao": so_dao_map.get(first.id) if first else None,
+            "tong_con": round(data.get("con", 0.0)),
             "dien_tich": float(phoi_area),
             "trong_luong": float(trong_luong),
             "the_tich": float(the_tich),

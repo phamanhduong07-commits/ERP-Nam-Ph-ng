@@ -293,13 +293,10 @@ export default function KhoPhoiPage() {
     },
     {
       title: 'Con nhỏ',
-      dataIndex: 'so_dao',
+      dataIndex: 'tong_con',
       width: 80,
       align: 'right' as const,
-      render: (v: number | null, row: KhoRow) => {
-        const total = v != null && row.tong_nhap ? v * row.tong_nhap : null
-        return total != null ? <Text style={{ fontSize: 12 }}>{fmtN(total)}</Text> : <Text type="secondary">—</Text>
-      },
+      render: (v: number | null) => v != null && v > 0 ? <Text style={{ fontSize: 12 }}>{fmtN(v)}</Text> : <Text type="secondary">—</Text>,
     },
     {
       title: 'Nhập (tấm)',
