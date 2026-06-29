@@ -5,7 +5,7 @@ import {
   message, Modal, Popconfirm, Progress, Radio, Row, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag,
   TimePicker, Tooltip, Typography,
 } from 'antd'
-import { CaretRightOutlined, CopyOutlined, LinkOutlined, PauseOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
+import { CaretRightOutlined, CopyOutlined, DeleteOutlined, LinkOutlined, PauseOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
@@ -938,9 +938,8 @@ export default function MaySongPage() {
     phieu: PhieuNhapPhoiSongListItem
     excessQty: number
   } | null>(null)
-  const [xuLyLoaiXuLy, setXuLyLoaiXuLy] = useState<string>('giao_sx')
+  const [xuLyItems, setXuLyItems] = useState<{ so_luong: number; loai_xu_ly: string }[]>([])
   const [xuLyGhiChu, setXuLyGhiChu] = useState<string>('')
-  const [xuLySoLuong, setXuLySoLuong] = useState<number>(0)
   const qc = useQueryClient()
   const user = useAuthStore(state => state.user)
 
@@ -1349,13 +1348,13 @@ export default function MaySongPage() {
   }
 
   const xuLyPhoiDuMut = useMutation({
-    mutationFn: ({ phieuId, data }: { phieuId: number; data: { so_luong_du: number; loai_xu_ly: string; ghi_chu?: string } }) =>
+    mutationFn: ({ phieuId, data }: { phieuId: number; data: { items: { so_luong: number; loai_xu_ly: string }[]; ghi_chu?: string } }) =>
       productionOrdersApi.nhapPhoiDuKho(phieuId, data),
     onSuccess: () => {
       message.success('Đã xử lý phôi dư')
       qc.invalidateQueries({ queryKey: ['phoi-du-phieu'] })
       setPhoiDuXuLyModal(null)
-      setXuLyLoaiXuLy('giao_sx')
+      setXuLyItems([])
       setXuLyGhiChu('')
     },
     onError: (e: unknown) => message.error(
@@ -2600,6 +2599,7 @@ export default function MaySongPage() {
                               giao_khach:           ['green',  'Giao khách'],
                               da_nhap_kho_tan_dung: ['cyan',   'Kho tận dụng'],
                               ban_phe:              ['red',    'Bán Phế'],
+                              mixed:                ['purple', 'Nhiều loại'],
                             }
                             const [color, label] = MAP[tt] ?? ['default', tt]
                             return (
@@ -2625,18 +2625,17 @@ export default function MaySongPage() {
                               >
                                 In tem
                               </Button>
-                              {r.remaining > 0.001 && (
+                              {r.excess > 0.001 && (
                                 <Button
                                   size="small"
                                   type="primary"
                                   onClick={() => {
-                                    setPhoiDuXuLyModal({ phieu: r.phieu, excessQty: r.remaining })
-                                    setXuLyLoaiXuLy('giao_sx')
+                                    setPhoiDuXuLyModal({ phieu: r.phieu, excessQty: r.excess })
+                                    setXuLyItems([{ so_luong: r.excess, loai_xu_ly: 'giao_sx' }])
                                     setXuLyGhiChu('')
-                                    setXuLySoLuong(r.remaining)
                                   }}
                                 >
-                                  Xử lý
+                                  Phân bổ
                                 </Button>
                               )}
                             </Space>
@@ -2755,89 +2754,131 @@ export default function MaySongPage() {
       </Modal>
 
       <Modal
-        title={`Xử lý phôi dư — ${phoiDuXuLyModal?.phieu.so_lenh ?? ''}`}
+        title={`Phân bổ phôi dư — ${phoiDuXuLyModal?.phieu.so_lenh ?? ''}`}
         open={phoiDuXuLyModal !== null}
         onCancel={() => setPhoiDuXuLyModal(null)}
         onOk={() => {
           const modal = phoiDuXuLyModal
           if (!modal) return
-          if (!xuLySoLuong || xuLySoLuong <= 0) { message.warning('Nhập số lượng xử lý'); return }
-          if (xuLySoLuong > modal.excessQty) { message.warning(`Số lượng không được vượt quá ${modal.excessQty}`); return }
-          if (!xuLyGhiChu.trim()) { message.warning('Nhập ghi chú xử lý'); return }
+          const validItems = xuLyItems.filter(it => it.so_luong > 0)
+          if (validItems.length === 0) { message.warning('Thêm ít nhất 1 dòng'); return }
+          const totalAlloc = validItems.reduce((s, it) => s + it.so_luong, 0)
+          if (totalAlloc > modal.excessQty + 0.001) {
+            message.warning(`Tổng phân bổ (${totalAlloc}) vượt quá phôi dư (${modal.excessQty})`)
+            return
+          }
           xuLyPhoiDuMut.mutate({
             phieuId: modal.phieu.id,
-            data: { so_luong_du: xuLySoLuong, loai_xu_ly: xuLyLoaiXuLy, ghi_chu: xuLyGhiChu.trim() },
+            data: { items: validItems, ghi_chu: xuLyGhiChu.trim() || undefined },
           })
         }}
         okText="Xác nhận"
         confirmLoading={xuLyPhoiDuMut.isPending}
-        width={420}
+        width={480}
         destroyOnHidden
       >
-        {phoiDuXuLyModal && (
-          <div style={{ paddingTop: 8 }}>
-            <Row style={{ marginBottom: 12 }}>
-              <Col span={12}>
-                <Text type="secondary" style={{ fontSize: 11 }}>Còn lại cần xử lý</Text>
-                <div>
-                  <Text strong style={{ fontSize: 20, color: '#E65100' }}>
-                    +{phoiDuXuLyModal.excessQty.toLocaleString('vi-VN')}
-                  </Text>
-                  <Text type="secondary" style={{ marginLeft: 4, fontSize: 13 }}>phôi</Text>
-                </div>
-              </Col>
-              <Col span={12}>
-                <Text type="secondary" style={{ fontSize: 11 }}>Sản phẩm</Text>
-                <div><Text strong style={{ fontSize: 13 }}>
-                  {phoiDuXuLyModal.phieu.items[0]?.ten_hang ?? '—'}
-                </Text></div>
-              </Col>
-            </Row>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ marginBottom: 4, fontWeight: 600 }}>Số lượng xử lý <Text type="danger">*</Text></div>
-              <InputNumber
-                value={xuLySoLuong}
-                onChange={v => setXuLySoLuong(v ?? 0)}
-                min={1}
-                max={phoiDuXuLyModal.excessQty}
-                style={{ width: '100%' }}
-                addonAfter="phôi"
-                addonBefore={
-                  <span
-                    style={{ cursor: 'pointer', color: '#1677ff', fontSize: 12 }}
-                    onClick={() => setXuLySoLuong(phoiDuXuLyModal.excessQty)}
-                  >Tất cả</span>
-                }
-              />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ marginBottom: 6, fontWeight: 600 }}>Xử lý như thế nào?</div>
-              <Radio.Group
-                value={xuLyLoaiXuLy}
-                onChange={e => setXuLyLoaiXuLy(e.target.value)}
-              >
-                <Space direction="vertical" size={6}>
-                  <Radio value="giao_sx">Cho sản xuất luôn</Radio>
-                  <Radio value="giao_khach">Giao luôn cho khách</Radio>
-                  <Radio value="da_nhap_kho_tan_dung">Nhập kho tận dụng (dùng sau)</Radio>
-                  <Radio value="ban_phe">Bán Phế</Radio>
-                </Space>
-              </Radio.Group>
-            </div>
-            <div>
-              <div style={{ marginBottom: 4, fontWeight: 600 }}>
-                Ghi chú <Text type="danger">*</Text>
+        {phoiDuXuLyModal && (() => {
+          const totalAlloc = xuLyItems.reduce((s, it) => s + it.so_luong, 0)
+          const over = totalAlloc > phoiDuXuLyModal.excessQty + 0.001
+          const LOAI_OPTIONS = [
+            { value: 'giao_sx',              label: 'Cho sản xuất luôn' },
+            { value: 'giao_khach',           label: 'Giao luôn cho khách' },
+            { value: 'da_nhap_kho_tan_dung', label: 'Nhập kho tận dụng' },
+            { value: 'ban_phe',              label: 'Bán Phế' },
+          ]
+          return (
+            <div style={{ paddingTop: 8 }}>
+              <Row style={{ marginBottom: 14 }}>
+                <Col span={12}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>Tổng phôi dư</Text>
+                  <div>
+                    <Text strong style={{ fontSize: 20, color: '#E65100' }}>
+                      {phoiDuXuLyModal.excessQty.toLocaleString('vi-VN')}
+                    </Text>
+                    <Text type="secondary" style={{ marginLeft: 4, fontSize: 13 }}>phôi</Text>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>Đã phân bổ</Text>
+                  <div>
+                    <Text strong style={{ fontSize: 20, color: over ? '#ff4d4f' : totalAlloc > 0 ? '#52c41a' : '#999' }}>
+                      {totalAlloc.toLocaleString('vi-VN')}
+                    </Text>
+                    <Text type="secondary" style={{ marginLeft: 4, fontSize: 13 }}>
+                      / {phoiDuXuLyModal.excessQty.toLocaleString('vi-VN')} phôi
+                    </Text>
+                  </div>
+                </Col>
+              </Row>
+
+              <div style={{ marginBottom: 8 }}>
+                {xuLyItems.map((item, i) => (
+                  <Row key={i} gutter={6} style={{ marginBottom: 6, alignItems: 'center' }}>
+                    <Col flex="100px">
+                      <InputNumber
+                        value={item.so_luong}
+                        onChange={v => {
+                          const next = [...xuLyItems]
+                          next[i] = { ...item, so_luong: v ?? 0 }
+                          setXuLyItems(next)
+                        }}
+                        min={1}
+                        style={{ width: '100%' }}
+                        addonAfter="tấm"
+                      />
+                    </Col>
+                    <Col flex="auto">
+                      <Select
+                        value={item.loai_xu_ly}
+                        onChange={v => {
+                          const next = [...xuLyItems]
+                          next[i] = { ...item, loai_xu_ly: v }
+                          setXuLyItems(next)
+                        }}
+                        style={{ width: '100%' }}
+                        options={LOAI_OPTIONS}
+                      />
+                    </Col>
+                    <Col flex="32px">
+                      {xuLyItems.length > 1 && (
+                        <Button
+                          type="text"
+                          danger
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          onClick={() => setXuLyItems(xuLyItems.filter((_, j) => j !== i))}
+                        />
+                      )}
+                    </Col>
+                  </Row>
+                ))}
               </div>
-              <Input.TextArea
-                value={xuLyGhiChu}
-                onChange={e => setXuLyGhiChu(e.target.value)}
-                placeholder="Ghi chú bắt buộc..."
-                rows={2}
-                autoFocus
-              />
+
+              <Button
+                type="dashed"
+                block
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  const remaining = Math.max(1, phoiDuXuLyModal.excessQty - totalAlloc)
+                  setXuLyItems([...xuLyItems, { so_luong: remaining, loai_xu_ly: 'giao_sx' }])
+                }}
+                style={{ marginBottom: 12 }}
+              >
+                Thêm dòng
+              </Button>
+
+              <div>
+                <div style={{ marginBottom: 4, fontWeight: 600 }}>Ghi chú</div>
+                <Input.TextArea
+                  value={xuLyGhiChu}
+                  onChange={e => setXuLyGhiChu(e.target.value)}
+                  placeholder="Ghi chú (tùy chọn)..."
+                  rows={2}
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </Modal>
 
       <Modal

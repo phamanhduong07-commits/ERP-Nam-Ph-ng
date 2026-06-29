@@ -1299,9 +1299,13 @@ def list_phieu_nhap_phoi_song(
     return result
 
 
-class XuLyPhoiDuBody(BaseModel):
-    so_luong_du: float
+class XuLyPhoiDuItem(BaseModel):
+    so_luong: float
     loai_xu_ly: str  # 'giao_sx' | 'giao_khach' | 'da_nhap_kho_tan_dung' | 'ban_phe'
+
+
+class XuLyPhoiDuBody(BaseModel):
+    items: list[XuLyPhoiDuItem]
     ghi_chu: str | None = None
 
 
@@ -1312,7 +1316,7 @@ def xu_ly_phoi_du(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Xử lý phôi dư: tan_dung/ban_phe tạo inventory transaction; giao_sx/giao_khach chỉ đánh dấu."""
+    """Xử lý phôi dư: hỗ trợ split nhiều dòng; tan_dung/ban_phe tạo inventory tx; giao_sx/giao_khach chỉ đánh dấu."""
     phieu = (
         db.query(PhieuNhapPhoiSong)
         .options(
@@ -1324,8 +1328,6 @@ def xu_ly_phoi_du(
     )
     if not phieu:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu nhập phôi")
-
-    so_luong = Decimal(str(data.so_luong_du))
 
     from app.models.inventory import InventoryTransaction
     from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
@@ -1339,7 +1341,7 @@ def xu_ly_phoi_du(
         else "Phôi dư"
     )
 
-    # Reverse các transaction phôi dư cũ nếu user đổi sang option khác
+    # Reverse tất cả transaction phôi dư cũ trước khi ghi lại từ đầu
     _PHOI_DU_TX_TYPES = {"NHAP_PHOI_DU", "NHAP_PHOI_LOI"}
     old_txs = (
         db.query(InventoryTransaction)
@@ -1356,41 +1358,39 @@ def xu_ly_phoi_du(
             bal_rev.ton_luong = max(Decimal("0"), bal_rev.ton_luong - Decimal(str(tx.so_luong)))
             db.delete(tx)
 
-    # Reset phoi_du_so_luong để tính lại từ đầu
     phieu.phoi_du_so_luong = Decimal("0")
 
-    if data.loai_xu_ly == "da_nhap_kho_tan_dung" and so_luong > 0:
-        if not phan_xuong_id:
+    # Xử lý từng dòng trong split
+    for split_item in data.items:
+        sl = Decimal(str(split_item.so_luong))
+        if sl <= 0:
+            continue
+
+        if split_item.loai_xu_ly in ("da_nhap_kho_tan_dung", "ban_phe") and not phan_xuong_id:
             raise HTTPException(status_code=400, detail="Lệnh SX chưa gắn xưởng.")
-        kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
-        bal_td = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
-        nhap_balance(bal_td, so_luong, Decimal("0"))
-        log_tx(
-            db, kho_td.id, "NHAP_PHOI_DU", so_luong, Decimal("0"),
-            bal_td.ton_luong, "phieu_nhap_phoi_song", phieu_id,
-            created_by=current_user.id, ghi_chu=data.ghi_chu,
-        )
 
-    elif data.loai_xu_ly == "ban_phe" and so_luong > 0:
-        if not phan_xuong_id:
-            raise HTTPException(status_code=400, detail="Lệnh SX chưa gắn xưởng.")
-        kho_pl = _get_or_create_workshop_warehouse(db, phan_xuong_id, "PHOI_LOI")
-        bal_pl = get_or_create_balance(db, kho_pl.id, ten_hang=ten_hang, don_vi="Tấm")
-        nhap_balance(bal_pl, so_luong, Decimal("0"))
-        log_tx(
-            db, kho_pl.id, "NHAP_PHOI_LOI", so_luong, Decimal("0"),
-            bal_pl.ton_luong, "phieu_nhap_phoi_song", phieu_id,
-            created_by=current_user.id, ghi_chu=data.ghi_chu,
-        )
+        if split_item.loai_xu_ly == "da_nhap_kho_tan_dung":
+            kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
+            bal_td = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
+            nhap_balance(bal_td, sl, Decimal("0"))
+            log_tx(db, kho_td.id, "NHAP_PHOI_DU", sl, Decimal("0"),
+                   bal_td.ton_luong, "phieu_nhap_phoi_song", phieu_id,
+                   created_by=current_user.id, ghi_chu=data.ghi_chu)
 
-    # giao_sx / giao_khach: mark only — phôi vẫn trong kho phôi, chờ phiếu thực sự
+        elif split_item.loai_xu_ly == "ban_phe":
+            kho_pl = _get_or_create_workshop_warehouse(db, phan_xuong_id, "PHOI_LOI")
+            bal_pl = get_or_create_balance(db, kho_pl.id, ten_hang=ten_hang, don_vi="Tấm")
+            nhap_balance(bal_pl, sl, Decimal("0"))
+            log_tx(db, kho_pl.id, "NHAP_PHOI_LOI", sl, Decimal("0"),
+                   bal_pl.ton_luong, "phieu_nhap_phoi_song", phieu_id,
+                   created_by=current_user.id, ghi_chu=data.ghi_chu)
+        # giao_sx / giao_khach: mark only — phôi vẫn trong kho phôi
 
-    # Tích lũy số lượng đã xử lý (đơn vị phôi)
-    new_processed = so_luong
+    new_processed = sum(Decimal(str(it.so_luong)) for it in data.items if it.so_luong > 0)
     phieu.phoi_du_so_luong = new_processed
     phieu.phoi_du_ghi_chu = data.ghi_chu
 
-    # Tính remaining theo đơn vị phôi (nhất quán với phoi_du_so_luong)
+    # Tính remaining theo đơn vị phôi
     total_so_tam  = sum(Decimal(str(it.so_tam or 0)) for it in phieu.items)
     total_kh_thg  = sum(Decimal(str(it.so_luong_ke_hoach)) for it in phieu.items)
     total_tt_thg  = sum(Decimal(str(it.so_luong_thuc_te or 0)) for it in phieu.items)
@@ -1400,7 +1400,9 @@ def xu_ly_phoi_du(
     remaining = total_excess_phoi - new_processed
 
     if remaining <= Decimal("0.001"):
-        phieu.phoi_du_trang_thai = data.loai_xu_ly
+        # Xác định trạng thái: 1 loại → dùng loại đó; nhiều loại → 'mixed'
+        active_types = {it.loai_xu_ly for it in data.items if it.so_luong > 0}
+        phieu.phoi_du_trang_thai = active_types.pop() if len(active_types) == 1 else "mixed"
 
     db.commit()
     db.refresh(phieu)

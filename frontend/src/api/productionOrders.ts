@@ -365,7 +365,7 @@ export const productionOrdersApi = {
       `/production-orders/${orderId}/push-to-cd2`,
     ),
 
-  nhapPhoiDuKho: (phieuId: number, data: { so_luong_du: number; loai_xu_ly: string; ghi_chu?: string }) =>
+  nhapPhoiDuKho: (phieuId: number, data: { items: { so_luong: number; loai_xu_ly: string }[]; ghi_chu?: string }) =>
     client.post<PhieuNhapPhoiSongListItem>(`/production-orders/phieu/${phieuId}/nhap-phoi-du-kho`, data),
 
   updatePhieuNhap: (phieuId: number, data: {

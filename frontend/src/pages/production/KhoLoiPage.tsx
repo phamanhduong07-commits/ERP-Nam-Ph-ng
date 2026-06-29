@@ -1336,8 +1336,7 @@ export default function KhoLoiPage() {
           if (!xuLyGhiChu.trim()) { message.warning('Vui lòng nhập ghi chú'); return }
           setXuLyLoading(true)
           productionOrdersApi.nhapPhoiDuKho(phoiDuXuLyModal.phieu.id, {
-            so_luong_du: phoiDuXuLyModal.excess,
-            loai_xu_ly: xuLyLoaiXuLy,
+            items: [{ so_luong: phoiDuXuLyModal.excess, loai_xu_ly: xuLyLoaiXuLy }],
             ghi_chu: xuLyGhiChu,
           })
             .then(() => {
