@@ -271,7 +271,11 @@ class ProductionOrderService:
         if sales_order_id:
             q = q.filter(ProductionOrder.sales_order_id == sales_order_id)
         if phan_xuong_id:
-            q = q.filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
+            child_ids = [r[0] for r in self.db.query(PhanXuong.id).filter(
+                PhanXuong.phoi_tu_phan_xuong_id == phan_xuong_id
+            ).all()]
+            all_px_ids = [phan_xuong_id] + child_ids
+            q = q.filter(ProductionOrder.phan_xuong_id.in_(all_px_ids))
         if phap_nhan_id:
             q = q.filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
         if tu_ngay:

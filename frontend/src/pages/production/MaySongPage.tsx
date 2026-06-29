@@ -919,6 +919,9 @@ export default function MaySongPage() {
   const [histSearchLenh, setHistSearchLenh]     = useState('')
   const [histFilterSessionId, setHistFilterSessionId] = useState<number | undefined>()
   const [histFilterKhId, setHistFilterKhId]     = useState<number | undefined>()
+  const [selectedPhieuIds, setSelectedPhieuIds] = useState<number[]>([])
+  const [reassignModalOpen, setReassignModalOpen] = useState(false)
+  const [reassignSessionId, setReassignSessionId] = useState<number | undefined>()
   const [inTemTabSearch, setInTemTabSearch] = useState('')
   const [inTemTabLoading, setInTemTabLoading] = useState(false)
   const [phoiDuTuNgay, setPhoiDuTuNgay] = useState<string | null>(null)
@@ -1008,7 +1011,6 @@ export default function MaySongPage() {
   // Lọc và hiển thị Tab 1
   const lsxBase = (lsxRes?.items ?? []).filter(o => {
     if (['huy', 'mua_ngoai'].includes(o.trang_thai)) return false
-    if (!khSoLenhSet) return false
     if (khSoLenhSet && !khSoLenhSet.has(o.so_lenh)) return false
     if (searchLenh && !o.so_lenh.toLowerCase().includes(searchLenh.toLowerCase())) return false
     if (searchHang && !(o.ten_hang ?? '').toLowerCase().includes(searchHang.toLowerCase())) return false
@@ -1371,6 +1373,29 @@ export default function MaySongPage() {
     ),
   })
 
+  const { data: activeSessionsForReassign = [], isLoading: loadingActiveSessions } = useQuery({
+    queryKey: ['active-sessions-reassign', filterPxId],
+    queryFn: () => warehouseApi.getActiveProductionSessions(filterPxId).then(r => r.data),
+    enabled: reassignModalOpen,
+    staleTime: 30_000,
+  })
+
+  const reassignMut = useMutation({
+    mutationFn: ({ sessionId, phieuIds }: { sessionId: number; phieuIds: number[] }) =>
+      warehouseApi.assignPhieuSong(sessionId, phieuIds),
+    onSuccess: (_data, vars) => {
+      message.success(`Đã chuyển ${vars.phieuIds.length} phiếu sang phiên mới`)
+      setReassignModalOpen(false)
+      setReassignSessionId(undefined)
+      setSelectedPhieuIds([])
+      qc.invalidateQueries({ queryKey: ['all-phieu'] })
+      refetchShiftSession()
+    },
+    onError: (e: unknown) => message.error(
+      (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? 'Lỗi chuyển phiên'
+    ),
+  })
+
   // ─── Cột bảng Tab 1 ────────────────────────────────────────────────────────
 
   const columns: ColumnsType<ProductionOrderListItem> = [
@@ -1714,27 +1739,39 @@ export default function MaySongPage() {
     {
       key: 'actions',
       title: '',
-      width: 60,
+      width: 100,
       fixed: 'right' as const,
       render: (_: unknown, r: PhieuNhapPhoiSongListItem) => (
-        <Button size="small" onClick={() => {
-          setEditPhieu(r)
-          editPhieuForm.setFieldsValue({
-            ngay: dayjs(r.ngay),
-            ca: r.ca,
-            gio_bat_dau: r.gio_bat_dau ? dayjs(r.gio_bat_dau, 'HH:mm') : null,
-            gio_ket_thuc: r.gio_ket_thuc ? dayjs(r.gio_ket_thuc, 'HH:mm') : null,
-            ghi_chu: r.ghi_chu,
-            items: r.items.map(it => ({
-              id: it.id,
-              so_luong_thuc_te: it.so_luong_thuc_te,
-              so_luong_loi: it.so_luong_loi,
-              chieu_kho: it.chieu_kho,
-              chieu_cat: it.chieu_cat,
-              so_tam: it.so_tam,
-            })),
-          })
-        }}>Sửa</Button>
+        <Space size={4}>
+          <Button size="small" onClick={() => {
+            setEditPhieu(r)
+            editPhieuForm.setFieldsValue({
+              ngay: dayjs(r.ngay),
+              ca: r.ca,
+              gio_bat_dau: r.gio_bat_dau ? dayjs(r.gio_bat_dau, 'HH:mm') : null,
+              gio_ket_thuc: r.gio_ket_thuc ? dayjs(r.gio_ket_thuc, 'HH:mm') : null,
+              ghi_chu: r.ghi_chu,
+              items: r.items.map(it => ({
+                id: it.id,
+                so_luong_thuc_te: it.so_luong_thuc_te,
+                so_luong_loi: it.so_luong_loi,
+                chieu_kho: it.chieu_kho,
+                chieu_cat: it.chieu_cat,
+                so_tam: it.so_tam,
+              })),
+            })
+          }}>Sửa</Button>
+          <Button
+            size="small"
+            type="link"
+            style={{ padding: 0 }}
+            onClick={() => {
+              setSelectedPhieuIds([r.id])
+              setReassignSessionId(undefined)
+              setReassignModalOpen(true)
+            }}
+          >Phiên</Button>
+        </Space>
       ),
     },
   ]
@@ -2152,7 +2189,22 @@ export default function MaySongPage() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <Space size={8}>
+                          {selectedPhieuIds.length > 0 && (
+                            <>
+                              <Text type="secondary" style={{ fontSize: 13 }}>{selectedPhieuIds.length} phiếu đã chọn</Text>
+                              <Button
+                                size="small"
+                                type="primary"
+                                onClick={() => { setReassignSessionId(undefined); setReassignModalOpen(true) }}
+                              >
+                                Chuyển phiên ({selectedPhieuIds.length})
+                              </Button>
+                              <Button size="small" onClick={() => setSelectedPhieuIds([])}>Bỏ chọn</Button>
+                            </>
+                          )}
+                        </Space>
                         {settingsButtonLichSu}
                       </div>
                       <Table
@@ -2164,6 +2216,11 @@ export default function MaySongPage() {
                         size="small"
                         scroll={{ x: 950 }}
                         locale={{ emptyText: <EmptyState size="small" /> }}
+                        rowSelection={{
+                          selectedRowKeys: selectedPhieuIds,
+                          onChange: (keys) => setSelectedPhieuIds(keys as number[]),
+                          preserveSelectedRowKeys: true,
+                        }}
                       />
                     </>
                   )}
@@ -2892,6 +2949,48 @@ export default function MaySongPage() {
             </Form.List>
           </Form>
         )}
+      </Modal>
+
+      {/* ── Modal chuyển phiếu sang phiên khác ── */}
+      <Modal
+        open={reassignModalOpen}
+        title={`Chuyển ${selectedPhieuIds.length} phiếu sang phiên`}
+        onCancel={() => { setReassignModalOpen(false); setReassignSessionId(undefined) }}
+        onOk={() => {
+          if (!reassignSessionId || selectedPhieuIds.length === 0) return
+          reassignMut.mutate({ sessionId: reassignSessionId, phieuIds: selectedPhieuIds })
+        }}
+        confirmLoading={reassignMut.isPending}
+        okText="Chuyển"
+        cancelText="Huỷ"
+        okButtonProps={{ disabled: !reassignSessionId }}
+        width={440}
+      >
+        <div style={{ marginBottom: 12, color: '#666', fontSize: 13 }}>
+          {selectedPhieuIds.length === 1 ? (
+            (() => {
+              const p = allPhieu.find(x => x.id === selectedPhieuIds[0])
+              return p?.session_ten_phien
+                ? <>Phiên hiện tại: <strong>{p.session_ten_phien}</strong></>
+                : <span style={{ color: '#999' }}>Chưa gán phiên nào</span>
+            })()
+          ) : (
+            <span>{selectedPhieuIds.length} phiếu được chọn</span>
+          )}
+        </div>
+        <Select
+          style={{ width: '100%' }}
+          placeholder="Chọn phiên muốn chuyển đến"
+          value={reassignSessionId}
+          onChange={setReassignSessionId}
+          loading={loadingActiveSessions}
+          options={activeSessionsForReassign.map(s => ({
+            value: s.id,
+            label: `${s.ten_phien}${s.phan_xuong_ten ? ` — ${s.phan_xuong_ten}` : ''}`,
+          }))}
+          optionFilterProp="label"
+          showSearch
+        />
       </Modal>
     </div>
   )

@@ -979,12 +979,18 @@ def create_phieu_nhap_phoi_song(
     db.refresh(phieu)
 
     # D3: Auto-link phiếu vào phiên sản xuất đang active cùng phan_xuong
+    # LSX của xưởng cd2 (Hóc Môn/Củ Chi) có phôi đến từ xưởng cd1 (Hoàng Gia/Nam Thuận)
+    # → session thuộc xưởng cd1, cần fallback lên phoi_tu_phan_xuong_id
     if order.phan_xuong_id and phieu.session_id is None:
         from app.models.production import ProductionSession
+        px = db.query(PhanXuong).filter(PhanXuong.id == order.phan_xuong_id).first()
+        session_px_ids = [order.phan_xuong_id]
+        if px and px.phoi_tu_phan_xuong_id:
+            session_px_ids.append(px.phoi_tu_phan_xuong_id)
         active_session = (
             db.query(ProductionSession)
             .filter(
-                ProductionSession.phan_xuong_id == order.phan_xuong_id,
+                ProductionSession.phan_xuong_id.in_(session_px_ids),
                 ProductionSession.trang_thai != "da_chot",
             )
             .order_by(ProductionSession.id.desc())
