@@ -39,13 +39,24 @@ export function useDataChangeSync(): void {
       }, 300)
     }
 
+    // Mobile: trình duyệt không fire 'focus' event đáng tin cậy khi quay lại từ
+    // background (lock screen, chuyển app). visibilitychange đáng tin hơn và
+    // hoạt động cả trên iOS Safari, Android Chrome, và PWA installed mode.
+    const visibilityHandler = () => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries()
+      }
+    }
+
     socket.on('data_changed', handler)
     // socket.io-client v4: sự kiện 'reconnect' nằm trên Manager, không phải Socket
     socket.io.on('reconnect', reconnectHandler)
+    document.addEventListener('visibilitychange', visibilityHandler)
 
     return () => {
       socket.off('data_changed', handler)
       socket.io.off('reconnect', reconnectHandler)
+      document.removeEventListener('visibilitychange', visibilityHandler)
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
     }
   }, [queryClient])
