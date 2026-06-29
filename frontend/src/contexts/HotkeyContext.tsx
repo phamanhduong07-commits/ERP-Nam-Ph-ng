@@ -78,8 +78,10 @@ export function HotkeyProvider({ children }: { children: ReactNode }) {
       definition.handler()
     }
 
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    // capture:true — Antd components call stopPropagation in bubble phase,
+    // capture phase fires first so hotkeys still reach the handler
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
   const api = useMemo<HotkeyRegistryApi>(

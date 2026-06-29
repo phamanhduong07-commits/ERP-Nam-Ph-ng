@@ -530,11 +530,22 @@ function AppLayoutInner() {
 
   useHotkey('ctrl+k', () => setSearchOpen(true), 'Tìm kiếm toàn cục', 'Toàn cục')
   useHotkey('?', () => setShortcutsOpen(true), 'Hiện danh sách phím tắt', 'Toàn cục')
-  useHotkey('escape', () => {
-    // Ant Design modals handle ESC natively — skip navigation when any modal is open
-    if (document.querySelector('.ant-modal-mask')) return
-    navigate(-1)
-  }, 'Quay lại trang trước', 'Toàn cục')
+  // Escape: direct window listener (capture phase) — bypasses HotkeyContext's isEditableTarget
+  // so it fires even when an Ant Design hidden input has focus
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (isSinglePageUser) { message.info('blocked: singlePageUser'); return }
+      if (document.querySelector('.ant-modal-mask')) { message.info('blocked: modal-mask'); return }
+      if (document.querySelector('.ant-select-open')) { message.info('blocked: select-open'); return }
+      if (document.querySelector('.ant-picker-open')) { message.info('blocked: picker-open'); return }
+      if (document.querySelector('.ant-dropdown-open')) { message.info('blocked: dropdown-open'); return }
+      message.info('navigating back...')
+      navigate(-1)
+    }
+    window.addEventListener('keydown', onEsc, true)
+    return () => window.removeEventListener('keydown', onEsc, true)
+  }, [navigate, isSinglePageUser])
 
   // ── Arrow navigation ───────────────────────────────────────────────────────
   const [tableNavIdx, setTableNavIdx] = useState(-1)

@@ -846,16 +846,24 @@ def create_from_lenh_sx(
     )
 
     # Tính tổng nhập per production_order_item_id
+    # item_luong: số THÙNG (so_luong_thuc_te) — dùng cho so_luong_phoi hiển thị ở CD2/thành phẩm
+    # tam_luong:  số TẤM  (so_tam)            — dùng cho InventoryBalance (kho phôi tính bằng tấm)
     item_luong: dict[int, float] = {}
+    tam_luong: dict[int, float] = {}
     warehouse_id_phoi: int | None = None
     for ph in phieus_nhap:
         if ph.warehouse_id and not warehouse_id_phoi:
             warehouse_id_phoi = ph.warehouse_id
         for it in ph.items:
-            net = float(it.so_luong_thuc_te or 0) - float(it.so_luong_loi or 0)
-            if it.production_order_item_id and net > 0:
+            net_thung = float(it.so_luong_thuc_te or 0) - float(it.so_luong_loi or 0)
+            net_tam   = float(it.so_tam or 0)
+            if it.production_order_item_id and net_thung > 0:
                 item_luong[it.production_order_item_id] = (
-                    item_luong.get(it.production_order_item_id, 0) + net
+                    item_luong.get(it.production_order_item_id, 0) + net_thung
+                )
+            if it.production_order_item_id and net_tam > 0:
+                tam_luong[it.production_order_item_id] = (
+                    tam_luong.get(it.production_order_item_id, 0) + net_tam
                 )
     so_luong_phoi = sum(item_luong.values())
     if so_luong_phoi == 0 and order.items:
@@ -877,27 +885,29 @@ def create_from_lenh_sx(
     elif first and first.rong and first.dai:
         quy_cach = f"{int(first.rong)}x{int(first.dai)}"
 
-    # Kiểm tra tồn kho phôi trong kho xưởng trước khi tạo phiếu in
+    # Kiểm tra tồn kho phôi (theo TẤM) trong kho xưởng trước khi tạo phiếu in
     wh_phoi = _get_workshop_warehouse(db, order.phan_xuong_id, "PHOI")
-    if wh_phoi and item_luong:
+    if wh_phoi and tam_luong:
         _poi_map: dict[int, str] = {it.id: it.ten_hang for it in order.items}
-        for poi_id, sl in item_luong.items():
+        for poi_id, sl_tam in list(tam_luong.items()):
             ten_hang = _poi_map.get(poi_id) or "Phôi sóng"
-            sl_dec = Decimal(str(round(sl, 3)))
+            sl_dec = Decimal(str(round(sl_tam, 3)))
             bal = db.query(InventoryBalance).filter(
                 InventoryBalance.warehouse_id == wh_phoi.id,
                 InventoryBalance.ten_hang == ten_hang,
             ).first()
             ton = bal.ton_luong if bal else Decimal("0")
-            if ton < sl_dec:
+            if ton <= Decimal("0"):
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"Kho phôi xưởng chưa đủ '{ten_hang}': "
-                        f"cần {float(sl_dec):g}, còn {float(ton):g}. "
+                        f"Kho phôi xưởng không có phôi '{ten_hang}'. "
                         "Vui lòng chuyển phôi về kho phôi xưởng trước."
                     ),
                 )
+            # Partial batch: cap tấm về số có trong kho (so_luong_phoi thùng giữ nguyên)
+            if ton < sl_dec:
+                tam_luong[poi_id] = float(ton)
 
     # Tạo PhieuIn
     phieu_in = PhieuIn(
@@ -940,7 +950,18 @@ def create_from_lenh_sx(
     # Map poi_id → ten_hang từ order.items
     poi_ten_hang: dict[int, str] = {it.id: it.ten_hang for it in order.items}
 
-    if item_luong:
+    # PhieuXuatPhoi ghi số TẤM (đơn vị kho phôi), dùng tam_luong
+    if tam_luong:
+        for poi_id, sl_tam in tam_luong.items():
+            phieu_xuat.items.append(
+                PhieuXuatPhoiItem(
+                    production_order_item_id=poi_id,
+                    ten_hang=poi_ten_hang.get(poi_id) or "Phôi sóng",
+                    so_luong=Decimal(str(round(sl_tam, 3))),
+                    ghi_chu=f"→ {phieu_in.so_phieu}",
+                )
+            )
+    elif item_luong:
         for poi_id, sl in item_luong.items():
             phieu_xuat.items.append(
                 PhieuXuatPhoiItem(
@@ -964,7 +985,9 @@ def create_from_lenh_sx(
     # Trừ InventoryBalance và Hạch toán kế toán
     if wh_phoi:
         journal_items = []
-        for poi_id, sl in (item_luong.items() if item_luong else [(first.id if first else None, so_luong_phoi)]):
+        # Dùng tam_luong (tấm) cho InventoryBalance — cùng đơn vị với kho phôi
+        _deduct_map = tam_luong if tam_luong else (item_luong if item_luong else {(first.id if first else None): so_luong_phoi})
+        for poi_id, sl in _deduct_map.items():
             if not poi_id:
                 continue
             ten_hang = poi_ten_hang.get(poi_id) or "Phôi sóng"
