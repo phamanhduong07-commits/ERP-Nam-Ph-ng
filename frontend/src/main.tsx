@@ -20,6 +20,16 @@ window.addEventListener('vite:preloadError', () => {
 // Dọn rác localStorage đã hết TTL khi app khởi động
 storage.purgeExpired()
 
+// Global Escape → navigate back (window.history.back bypasses React context entirely)
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return
+  if (document.querySelector('.ant-modal-mask')) return
+  if (document.querySelector('.ant-select-open')) return
+  if (document.querySelector('.ant-picker-open')) return
+  if (document.querySelector('.ant-dropdown-open')) return
+  window.history.back()
+}, true)
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
