@@ -1174,6 +1174,8 @@ def copy_quote(
             }
             quote.items.append(QuoteItem(**data))
         db.add(quote)
+        db.flush()
+        _recalc_totals(quote)
         db.commit()
         db.refresh(quote)
         return _build_response(_load_quote(quote.id, db))
