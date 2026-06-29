@@ -1393,11 +1393,13 @@ async def finish_sau_in(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    _PARALLEL_STATES = {"cho_in", "ke_hoach", "dang_in"}
+    # dang_in: in đang chạy song song → chỉ ghi nhận TP, không chuyển hoan_thanh
+    # cho_in / ke_hoach: chưa in → cho phép hoàn thành thẳng (bỏ qua ràng buộc máy in)
+    _PARALLEL_STATES = {"dang_in"}
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
-    if p.trang_thai not in ("sau_in", "dang_sau_in", *_PARALLEL_STATES):
+    if p.trang_thai not in ("sau_in", "dang_sau_in", "cho_in", "ke_hoach", *_PARALLEL_STATES):
         raise HTTPException(
             status_code=400, detail=f"Phiếu đang ở trạng thái '{p.trang_thai}', không thể hoàn thành TP")
     if body:

@@ -608,11 +608,12 @@ export default function MobileTrackingPage() {
     mutationFn: (body: { so_luong_sau_in_ok?: number; so_luong_sau_in_loi?: number; ghi_chu_sau_in?: string }) =>
       cd2Api.hoanThanh(currentOrder!.id, { ...body, printer_user_id: workerSession?.printer_user_id }),
     onSuccess: () => {
-      const isParallel = PARALLEL_PRINT_STATES.includes(currentOrder?.trang_thai ?? '')
+      // Chỉ dang_in mới là parallel (in đang chạy song song)
+      // cho_in / ke_hoach đã chuyển thẳng sang hoan_thanh ở backend
+      const isParallel = currentOrder?.trang_thai === 'dang_in'
       message.success(isParallel ? 'Đã ghi nhận TP xong — đã nhập kho!' : 'Đã hoàn thành — đã nhập kho thành phẩm!')
       setCurrentOrder(prev => prev ? {
         ...prev,
-        // Parallel: giữ trang_thai để printer tiếp tục; đánh dấu TP done bằng gio_hoan_thanh_dinh_hinh
         trang_thai: isParallel ? prev.trang_thai : 'hoan_thanh',
         gio_hoan_thanh_dinh_hinh: new Date().toISOString(),
       } : prev)
@@ -1429,38 +1430,75 @@ export default function MobileTrackingPage() {
 
                   {/* Chờ bắt đầu → BẮT ĐẦU LÀM TP */}
                   {isSauInPending && (
-                    <Col span={24}>
-                      <Button
-                        type="primary" size="large" block icon={<PlayCircleFilled />}
-                        onClick={() => {
-                          if ('vibrate' in navigator) navigator.vibrate(50)
-                          if (!currentOrder) return
-                          Modal.confirm({
-                            title: 'Xác nhận bắt đầu làm thành phẩm',
-                            content: (
-                              <div>
-                                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{currentOrder.ten_hang}</div>
-                                <div style={{ color: '#888', fontSize: 13 }}>{currentOrder.so_luong_phoi?.toLocaleString()} tờ · {currentOrder.so_lsx}</div>
-                              </div>
-                            ),
-                            okText: 'BẮT ĐẦU',
-                            cancelText: 'Huỷ',
-                            okButtonProps: { style: { background: '#722ed1', borderColor: '#722ed1', height: 44, fontSize: 16, fontWeight: 700 } },
-                            cancelButtonProps: { size: 'large' },
-                            centered: true,
-                            icon: <PlayCircleFilled style={{ color: '#722ed1' }} />,
-                            onOk: () => dinhHinhStartMutation.mutate(currentOrder.id),
-                          })
-                        }}
-                        loading={dinhHinhStartMutation.isPending}
-                        style={{
-                          height: 100, borderRadius: 24, background: '#722ed1', border: 'none',
-                          fontSize: 22, fontWeight: 700, boxShadow: '0 8px 24px rgba(114,46,209,0.4)',
-                        }}
-                      >
-                        BẮT ĐẦU LÀM TP
-                      </Button>
-                    </Col>
+                    <>
+                      <Col span={isParallelPrinting ? 14 : 24}>
+                        <Button
+                          type="primary" size="large" block icon={<PlayCircleFilled />}
+                          onClick={() => {
+                            if ('vibrate' in navigator) navigator.vibrate(50)
+                            if (!currentOrder) return
+                            Modal.confirm({
+                              title: 'Xác nhận bắt đầu làm thành phẩm',
+                              content: (
+                                <div>
+                                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{currentOrder.ten_hang}</div>
+                                  <div style={{ color: '#888', fontSize: 13 }}>{currentOrder.so_luong_phoi?.toLocaleString()} tờ · {currentOrder.so_lsx}</div>
+                                </div>
+                              ),
+                              okText: 'BẮT ĐẦU',
+                              cancelText: 'Huỷ',
+                              okButtonProps: { style: { background: '#722ed1', borderColor: '#722ed1', height: 44, fontSize: 16, fontWeight: 700 } },
+                              cancelButtonProps: { size: 'large' },
+                              centered: true,
+                              icon: <PlayCircleFilled style={{ color: '#722ed1' }} />,
+                              onOk: () => dinhHinhStartMutation.mutate(currentOrder.id),
+                            })
+                          }}
+                          loading={dinhHinhStartMutation.isPending}
+                          style={{
+                            height: 100, borderRadius: 24, background: '#722ed1', border: 'none',
+                            fontSize: isParallelPrinting ? 17 : 22, fontWeight: 700, boxShadow: '0 8px 24px rgba(114,46,209,0.4)',
+                          }}
+                        >
+                          BẮT ĐẦU LÀM TP
+                        </Button>
+                      </Col>
+                      {/* cho_in / ke_hoach: hoàn thành thẳng không qua máy in */}
+                      {isParallelPrinting && (
+                        <Col span={10}>
+                          <Button
+                            size="large" block
+                            onClick={() => {
+                              if ('vibrate' in navigator) navigator.vibrate(50)
+                              if (!currentOrder) return
+                              Modal.confirm({
+                                title: 'Hoàn thành không qua in?',
+                                content: (
+                                  <div>
+                                    <div style={{ fontSize: 14, marginBottom: 4 }}>{currentOrder.ten_hang}</div>
+                                    <div style={{ color: '#888', fontSize: 13 }}>{currentOrder.so_lsx}</div>
+                                  </div>
+                                ),
+                                okText: 'HOÀN THÀNH',
+                                cancelText: 'Huỷ',
+                                okButtonProps: { style: { background: '#52c41a', borderColor: '#52c41a', height: 44, fontSize: 15, fontWeight: 700 } },
+                                cancelButtonProps: { size: 'large' },
+                                centered: true,
+                                onOk: () => dinhHinhFinishMutation.mutate({}),
+                              })
+                            }}
+                            loading={dinhHinhFinishMutation.isPending}
+                            style={{
+                              height: 100, borderRadius: 24, background: '#52c41a', border: 'none',
+                              color: '#fff', fontSize: 15, fontWeight: 700,
+                              boxShadow: '0 8px 24px rgba(82,196,26,0.35)',
+                            }}
+                          >
+                            HOÀN THÀNH
+                          </Button>
+                        </Col>
+                      )}
+                    </>
                   )}
 
                   {/* Đang chạy → TẠM DỪNG + HOÀN THÀNH + MÁY BỊ LỖI + NGƯNG */}
