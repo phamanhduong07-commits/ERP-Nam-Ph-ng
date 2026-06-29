@@ -608,13 +608,11 @@ export default function MobileTrackingPage() {
     mutationFn: (body: { so_luong_sau_in_ok?: number; so_luong_sau_in_loi?: number; ghi_chu_sau_in?: string }) =>
       cd2Api.hoanThanh(currentOrder!.id, { ...body, printer_user_id: workerSession?.printer_user_id }),
     onSuccess: () => {
-      // Chỉ dang_in mới là parallel (in đang chạy song song)
-      // cho_in / ke_hoach đã chuyển thẳng sang hoan_thanh ở backend
-      const isParallel = currentOrder?.trang_thai === 'dang_in'
-      message.success(isParallel ? 'Đã ghi nhận TP xong — đã nhập kho!' : 'Đã hoàn thành — đã nhập kho thành phẩm!')
+      // In và TP hoàn toàn độc lập — luôn chuyển sang hoan_thanh
+      message.success('Đã hoàn thành — đã nhập kho thành phẩm!')
       setCurrentOrder(prev => prev ? {
         ...prev,
-        trang_thai: isParallel ? prev.trang_thai : 'hoan_thanh',
+        trang_thai: 'hoan_thanh',
         gio_hoan_thanh_dinh_hinh: new Date().toISOString(),
       } : prev)
       setIsDinhHinhCompleteModalOpen(false)
