@@ -1017,7 +1017,7 @@ def create_phieu_nhap_phoi_song(
 
     # Cập nhật tồn kho phôi vào kho đã resolve
     if warehouse_id:
-        from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
+        from app.services.inventory_service import get_or_create_balance, nhap_balance, xuat_balance, log_tx
         items = db.query(PhieuNhapPhoiSongItem).filter(
             PhieuNhapPhoiSongItem.phieu_id == phieu.id
         ).all()
@@ -1037,6 +1037,12 @@ def create_phieu_nhap_phoi_song(
             nhap_balance(balance, sl_nhap, don_gia)
             log_tx(db, warehouse_id, "NHAP_PHOI", sl_nhap, don_gia,
                    balance.ton_luong, "phieu_nhap_phoi_song", phieu.id, current_user.id)
+            # Auto-deduct phôi lỗi ngay khi tạo phiếu
+            sl_loi = Decimal(str(it.so_luong_loi or 0))
+            if sl_loi > 0:
+                xuat_balance(balance, sl_loi, ten_hang)
+                log_tx(db, warehouse_id, "NHAP_PHOI_LOI", sl_loi, Decimal("0"),
+                       balance.ton_luong, "phieu_nhap_phoi_song", phieu.id, current_user.id)
         db.commit()
 
     return _phieu_to_dict(phieu)
