@@ -47,7 +47,6 @@ DELETE_ORDER = [
     "production_khau_costs",
     "production_bom_indirect_items",
     "production_bom_items",
-    "production_plan_lines",
     "production_logs",
     "production_cost_inputs",
     "production_cost_allocations",
@@ -59,6 +58,8 @@ DELETE_ORDER = [
     "purchase_requisition_items",
     "purchase_return_items",
     "purchase_order_items",
+    # production_plan_lines phải sau purchase_order_items (FK: purchase_order_items → production_plan_lines)
+    "production_plan_lines",
 
     # ── Phase 4: Warehouse details ────────────────────────────────────────────
     "goods_receipt_items",
@@ -193,88 +194,72 @@ def get_row_count(conn, table: str) -> int:
 def main(dry_run: bool = False) -> None:
     engine = create_engine(settings.DATABASE_URL)
 
+    # Lọc bảng tồn tại trong DB
+    with engine.connect() as conn:
+        existing: list[str] = []
+        counts: dict[str, int] = {}
+        for table in DELETE_ORDER:
+            c = get_row_count(conn, table)
+            if c >= 0:
+                existing.append(table)
+                counts[table] = c
+
     if dry_run:
         print("=" * 60)
-        print("DRY RUN — chỉ đếm bản ghi, KHÔNG xóa")
+        print("DRY RUN -- chi dem ban ghi, KHONG xoa")
         print("=" * 60)
-        with engine.connect() as conn:
-            total = 0
-            for table in DELETE_ORDER:
-                count = get_row_count(conn, table)
-                if count > 0:
-                    print(f"  {table:<45} {count:>8} bản ghi")
-                    total += count
-                elif count == 0:
-                    pass  # bảng trống, không in
-                else:
-                    print(f"  {table:<45}  [bảng không tồn tại]")
-            print("-" * 60)
-            print(f"  TỔNG cộng sẽ xóa:                          {total:>8} bản ghi")
+        total = 0
+        for t in existing:
+            if counts[t] > 0:
+                print(f"  {t:<45} {counts[t]:>8} ban ghi")
+                total += counts[t]
+        print("-" * 60)
+        print(f"  TONG se xoa:                                {total:>8} ban ghi")
         return
 
-    # ── Xóa thật ─────────────────────────────────────────────────────────────
+    # ── Đếm tổng trước khi xóa ───────────────────────────────────────────────
     print("=" * 60)
-    print("XÓA DỮ LIỆU GIAO DỊCH ERP NAM PHƯƠNG")
+    print("XOA DU LIEU GIAO DICH ERP NAM PHUONG")
     print("=" * 60)
+    non_empty = [t for t in existing if counts[t] > 0]
+    if not non_empty:
+        print("Tat ca bang da trong, khong co gi de xoa.")
+        return
+
+    for t in non_empty:
+        print(f"  {t:<45} {counts[t]:>8} ban ghi")
+    print(f"  {'TONG':<45} {sum(counts[t] for t in non_empty):>8} ban ghi")
     print()
 
-    deleted_counts: dict[str, int] = {}
-    skipped: list[str] = []
-    errors: list[tuple[str, str]] = []
-
+    # ── TRUNCATE tất cả một lần với CASCADE ──────────────────────────────────
+    # CASCADE xử lý FK tự động; chỉ ảnh hưởng các bảng trong danh sách này
+    # (master data không có FK trỏ ngược vào bảng giao dịch → an toàn)
+    tables_sql = ", ".join(non_empty)
     with engine.begin() as conn:
-        for table in DELETE_ORDER:
-            # Đếm trước khi xóa
-            before = get_row_count(conn, table)
-            if before == -1:
-                skipped.append(table)
-                continue
-            if before == 0:
-                continue  # bảng trống, bỏ qua
+        conn.execute(text(f"TRUNCATE {tables_sql} CASCADE"))
 
-            try:
-                conn.execute(text(f"DELETE FROM {table}"))
-                deleted_counts[table] = before
-                print(f"  ✓ {table:<45} -{before:>7} bản ghi")
-            except Exception as e:
-                errors.append((table, str(e)))
-                print(f"  ✗ {table:<45} LỖI: {e}")
-                # Raise để rollback toàn bộ transaction
-                raise
-
-    # ── Báo cáo ───────────────────────────────────────────────────────────────
+    print("HOAN THANH -- da xoa sach toan bo du lieu giao dich.")
     print()
-    print("=" * 60)
-    if errors:
-        print(f"THẤT BẠI — {len(errors)} bảng lỗi, toàn bộ đã ROLLBACK")
-        for tbl, err in errors:
-            print(f"  {tbl}: {err}")
-    else:
-        total = sum(deleted_counts.values())
-        print(f"HOÀN THÀNH — đã xóa {len(deleted_counts)} bảng, {total:,} bản ghi")
-        if skipped:
-            print(f"  Bỏ qua (không tồn tại): {', '.join(skipped)}")
-        print()
-        print("Các bảng master data được GIỮ NGUYÊN:")
-        print("  customers, suppliers, products, paper_materials,")
-        print("  users, roles, permissions, print_templates, ...")
+    print("Giu nguyen: customers, suppliers, products, paper_materials,")
+    print("            users, roles, permissions, print_templates, ...")
     print("=" * 60)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Reset dữ liệu giao dịch ERP")
-    parser.add_argument("--dry-run", action="store_true", help="Chỉ đếm, không xóa")
+    parser = argparse.ArgumentParser(description="Reset du lieu giao dich ERP")
+    parser.add_argument("--dry-run", action="store_true", help="Chi dem, khong xoa")
+    parser.add_argument("--yes", action="store_true", help="Xac nhan khong hoi lai")
     args = parser.parse_args()
 
     confirm = True
-    if not args.dry_run:
-        print("⚠️  CẢNH BÁO: Thao tác này sẽ XÓA VĨNH VIỄN dữ liệu đơn hàng!")
-        print("   Backup DB trước nếu cần (pg_dump hoặc copy file .db)")
+    if not args.dry_run and not args.yes:
+        print("CANH BAO: Thao tac nay se XOA VINH VIEN du lieu don hang!")
+        print("Backup DB truoc neu can (pg_dump hoac copy file .db)")
         print()
-        ans = input("Gõ 'XOA' để xác nhận: ").strip()
+        ans = input("Go 'XOA' de xac nhan: ").strip()
         confirm = (ans == "XOA")
 
     if confirm:
         main(dry_run=args.dry_run)
     else:
-        print("Đã hủy.")
+        print("Da huy.")
