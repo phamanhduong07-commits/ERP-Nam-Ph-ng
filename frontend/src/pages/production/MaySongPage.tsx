@@ -1066,7 +1066,6 @@ export default function MaySongPage() {
     queryFn: () =>
       productionOrdersApi.listAllPhieu({ tu_ngay: histTuNgay ?? undefined, den_ngay: histDenNgay ?? undefined }).then(r => r.data),
     enabled: activeTab === 'lich_su' && !!(histTuNgay || histDenNgay),
-    staleTime: 30_000,
   })
 
   // Options phiên — build từ allPhieu đã tải, không cần API thêm
@@ -1109,12 +1108,15 @@ export default function MaySongPage() {
   const phoiDuItems = useMemo(() => {
     return phoiDuPhieuList
       .map(p => {
-        const slKh = p.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
+        const slKh      = p.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
         const slTt      = Number(p.tong_so_luong_thuc_te)
-        const excess    = Math.round((slTt - slKh) * 1000) / 1000
+        const tongSoTam = Number(p.tong_so_tam)
+        // Đổi KH thùng → KH phôi theo tỉ lệ thực tế để tránh phụ thuộc so_dao
+        const slKhPhoi  = slTt > 0 ? Math.round(slKh * tongSoTam / slTt) : 0
+        const excess    = Math.round((tongSoTam - slKhPhoi) * 1000) / 1000
         const processed = Math.round((p.phoi_du_so_luong ?? 0) * 1000) / 1000
         const remaining = Math.round((excess - processed) * 1000) / 1000
-        return { phieu: p, slKh, slTt, excess, processed, remaining }
+        return { phieu: p, slKh, slTt, tongSoTam, slKhPhoi, excess, processed, remaining }
       })
       .filter(r => r.excess > 0.001)
       .filter(r => phoiDuShowAll || r.remaining > 0.001)
@@ -1172,6 +1174,7 @@ export default function MaySongPage() {
       message.success(sessionName ? `Đã lưu phiếu — gộp vào ${sessionName} ✓` : 'Đã lưu phiếu — lệnh SX hoàn thành!')
       refetchShiftSession()
       invalidateList()
+      qc.invalidateQueries({ queryKey: ['all-phieu'] })
       if (hoanthanhOrder) {
         const planLine = khDetail?.lines.find(l => l.so_lenh === hoanthanhOrder.so_lenh) ?? null
         const oi0 = hoanthanhOrder.items[0]
@@ -1203,6 +1206,7 @@ export default function MaySongPage() {
       message.success(`Đã ngưng — lệnh bù ${soLenhBu} (${conLai.toLocaleString()} thùng) đã tạo!`, 5)
       refetchShiftSession()
       invalidateList()
+      qc.invalidateQueries({ queryKey: ['all-phieu'] })
       setNgungId(null)
     },
     onError: () => message.error('Lỗi khi ngưng, vui lòng thử lại'),
@@ -2534,17 +2538,31 @@ export default function MaySongPage() {
                         },
                         {
                           key: 'sl_kh',
-                          title: 'KH',
-                          width: 80,
+                          title: 'Số con KH',
+                          width: 90,
                           align: 'right',
                           render: (_, r) => r.slKh.toLocaleString('vi-VN'),
                         },
                         {
                           key: 'sl_tt',
-                          title: 'Thực tế',
-                          width: 80,
+                          title: 'Số con TT',
+                          width: 90,
                           align: 'right',
                           render: (_, r) => r.slTt.toLocaleString('vi-VN'),
+                        },
+                        {
+                          key: 'phoi_kh',
+                          title: 'Phôi KH',
+                          width: 80,
+                          align: 'right',
+                          render: (_, r) => <Text style={{ color: '#1677ff' }}>{r.slKhPhoi.toLocaleString('vi-VN')}</Text>,
+                        },
+                        {
+                          key: 'phoi_tt',
+                          title: 'Phôi TT',
+                          width: 80,
+                          align: 'right',
+                          render: (_, r) => <Text style={{ color: '#1677ff' }}>{r.tongSoTam.toLocaleString('vi-VN')}</Text>,
                         },
                         {
                           key: 'excess',

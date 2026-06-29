@@ -880,6 +880,7 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
         "ghi_chu": p.ghi_chu,
         "gio_bat_dau": p.gio_bat_dau,
         "gio_ket_thuc": p.gio_ket_thuc,
+        "session_id": p.session_id,
         "phoi_du_trang_thai": p.phoi_du_trang_thai,
         "phoi_du_ghi_chu": p.phoi_du_ghi_chu,
         "phoi_du_so_luong": float(p.phoi_du_so_luong) if p.phoi_du_so_luong is not None else None,
@@ -1326,19 +1327,23 @@ def xu_ly_phoi_du(
 
     so_luong = Decimal(str(data.so_luong_du))
 
+    from app.models.inventory import InventoryBalance, InventoryTransaction
+    from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
+
+    order = phieu.production_order
+    phan_xuong_id = order.phan_xuong_id if order else None
+    item0 = phieu.items[0] if phieu.items else None
+    ten_hang = (
+        f"{int(item0.chieu_kho)}x{int(item0.chieu_cat)}"
+        if item0 and item0.chieu_kho and item0.chieu_cat
+        else "Phôi dư"
+    )
+
     if data.loai_xu_ly == "da_nhap_kho_tan_dung" and so_luong > 0:
-        order = phieu.production_order
-        phan_xuong_id = order.phan_xuong_id if order else None
         if not phan_xuong_id:
             raise HTTPException(status_code=400, detail="Lệnh SX chưa gắn xưởng.")
-        from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
-        item0 = phieu.items[0] if phieu.items else None
-        if item0 and item0.chieu_kho and item0.chieu_cat:
-            ten_hang = f"{int(item0.chieu_kho)}x{int(item0.chieu_cat)}"
-        else:
-            ten_hang = "Phôi dư"
 
-        # Nhập vào kho TAN_DUNG — kho PHOI không dùng InventoryBalance, tồn được trừ qua /ton-kho-lsx
+        # Nhập vào kho TAN_DUNG — tồn kho phôi được trừ qua /ton-kho-lsx
         kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
         bal_td = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
         nhap_balance(bal_td, so_luong, Decimal("0"))
@@ -1348,6 +1353,24 @@ def xu_ly_phoi_du(
             created_by=current_user.id,
             ghi_chu=data.ghi_chu,
         )
+    else:
+        # Không nhập tận dụng — reversal các transaction NHAP_PHOI_DU cũ của phiếu này
+        # (trường hợp user bấm nhầm tận dụng trước, sau đổi sang giao_sx / hủy)
+        old_txs = (
+            db.query(InventoryTransaction)
+            .filter(
+                InventoryTransaction.chung_tu_loai == "phieu_nhap_phoi_song",
+                InventoryTransaction.chung_tu_id == phieu_id,
+                InventoryTransaction.loai_giao_dich == "NHAP_PHOI_DU",
+            )
+            .all()
+        )
+        if old_txs and phan_xuong_id:
+            kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
+            bal_td = get_or_create_balance(db, kho_td.id, ten_hang=ten_hang, don_vi="Tấm")
+            for tx in old_txs:
+                bal_td.ton_luong = max(Decimal("0"), bal_td.ton_luong - Decimal(str(tx.so_luong)))
+                db.delete(tx)
 
     # Tích lũy số lượng đã xử lý
     old_processed = Decimal(str(phieu.phoi_du_so_luong or 0))
