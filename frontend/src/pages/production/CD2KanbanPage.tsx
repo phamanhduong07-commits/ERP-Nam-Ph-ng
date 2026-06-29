@@ -436,12 +436,12 @@ function KanbanCard({
 
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {(() => {
-            const isTP = ['cho_dinh_hinh', 'sau_in', 'dang_sau_in'].includes(phieu.trang_thai)
-            const slVal = isTP ? phieu.so_luong_in_ok : phieu.so_luong_phoi
+            const hasInOk = phieu.so_luong_in_ok != null
+            const slVal = hasInOk ? phieu.so_luong_in_ok : phieu.so_luong_phoi
             return slVal != null ? (
               <Text style={{ fontSize: 11 }}>
-                <span style={{ color: '#888' }}>{isTP ? 'In OK: ' : 'SL: '}</span>
-                <strong style={isTP ? { color: '#52c41a' } : undefined}>{slVal.toLocaleString('vi-VN')}</strong>
+                <span style={{ color: '#888' }}>{hasInOk ? 'In OK: ' : 'SL: '}</span>
+                <strong style={hasInOk ? { color: '#52c41a' } : undefined}>{slVal.toLocaleString('vi-VN')}</strong>
               </Text>
             ) : null
           })()}
