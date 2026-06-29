@@ -884,6 +884,7 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
         "phoi_du_trang_thai": p.phoi_du_trang_thai,
         "phoi_du_ghi_chu": p.phoi_du_ghi_chu,
         "phoi_du_so_luong": float(p.phoi_du_so_luong) if p.phoi_du_so_luong is not None else None,
+        "phoi_du_items": p.phoi_du_items,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "items": [
             {
@@ -1389,6 +1390,10 @@ def xu_ly_phoi_du(
     new_processed = sum(Decimal(str(it.so_luong)) for it in data.items if it.so_luong > 0)
     phieu.phoi_du_so_luong = new_processed
     phieu.phoi_du_ghi_chu = data.ghi_chu
+    phieu.phoi_du_items = [
+        {"so_luong": float(it.so_luong), "loai_xu_ly": it.loai_xu_ly}
+        for it in data.items if it.so_luong > 0
+    ]
 
     # Tính remaining theo đơn vị phôi
     total_so_tam  = sum(Decimal(str(it.so_tam or 0)) for it in phieu.items)

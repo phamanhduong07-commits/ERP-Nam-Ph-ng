@@ -1140,6 +1140,7 @@ export default function KhoPhoiPage() {
                   {phoiDuRows.map(({ p, excess, processed, remaining }) => {
                     const tt = p.phoi_du_trang_thai
                     const [tagColor, tagLabel] = tt ? (PHOI_DU_MAP[tt] ?? ['default', tt]) : ['orange', 'Chưa xử lý']
+                    const items = p.phoi_du_items
                     return (
                       <div key={p.id} style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6, padding: '8px 12px', marginBottom: 6 }}>
                         <Row gutter={12} align="middle">
@@ -1149,9 +1150,9 @@ export default function KhoPhoiPage() {
                               <Text style={{ fontSize: 13 }}>Dư </Text>
                               <Text strong style={{ fontSize: 14, color: '#E65100' }}>+{fmtN(excess)}</Text>
                               <Text type="secondary" style={{ fontSize: 12 }}> phôi</Text>
-                              {processed > 0 && (
+                              {remaining > 0.001 && processed > 0 && (
                                 <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
-                                  · đã xử lý {fmtN(processed)} · còn {fmtN(remaining)}
+                                  · còn {fmtN(remaining)} chưa xử lý
                                 </Text>
                               )}
                             </div>
@@ -1160,6 +1161,22 @@ export default function KhoPhoiPage() {
                             <Tag color={tagColor} style={{ fontSize: 11 }}>{tagLabel}</Tag>
                           </Col>
                         </Row>
+                        {/* Breakdown chi tiết khi có nhiều dòng phân bổ */}
+                        {items && items.length > 0 && (
+                          <div style={{ marginTop: 6, paddingLeft: 4 }}>
+                            {items.map((item, idx) => {
+                              const [color, label] = PHOI_DU_MAP[item.loai_xu_ly] ?? ['default', item.loai_xu_ly]
+                              return (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                  <Text style={{ fontSize: 12 }}>•</Text>
+                                  <Text strong style={{ fontSize: 12 }}>{fmtN(item.so_luong)}</Text>
+                                  <Text style={{ fontSize: 12 }}>phôi</Text>
+                                  <Tag color={color} style={{ fontSize: 11, margin: 0 }}>{label}</Tag>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                         {p.phoi_du_ghi_chu && (
                           <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
                             {p.phoi_du_ghi_chu}

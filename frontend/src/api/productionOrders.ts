@@ -279,6 +279,7 @@ export interface PhieuNhapPhoiSongListItem extends PhieuNhapPhoiSong {
   phoi_du_trang_thai: string | null
   phoi_du_ghi_chu: string | null
   phoi_du_so_luong: number | null
+  phoi_du_items: { so_luong: number; loai_xu_ly: string }[] | null
   phan_xuong_id: number | null
 }
 
