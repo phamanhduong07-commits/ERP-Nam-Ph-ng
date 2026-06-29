@@ -18,7 +18,7 @@ from app.deps import get_current_user, get_sale_visible_nv_ids, require_any_perm
 import logging
 from app.models.auth import User
 from app.models.master import Warehouse, PhanXuong, Customer, CustomerNhanVien
-from app.models.sales import SalesOrder
+from app.models.sales import SalesOrder, SalesOrderItem
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
@@ -682,6 +682,29 @@ def ton_kho_lsx(
     )
     order_map = {o.id: o for o in orders}
 
+    # Batch-fetch QuoteItem prices cho các LSX chưa có don_gia_noi_bo
+    # order_id -> (gia_phoi, gia_noi_bo) từ QuoteItem của SOI đầu tiên
+    order_fallback_prices: dict[int, tuple] = {}
+    orders_need_fallback = [o for o in orders if not o.don_gia_noi_bo and o.items]
+    if orders_need_fallback:
+        soi_id_by_order = {
+            o.id: o.items[0].sales_order_item_id
+            for o in orders_need_fallback
+            if o.items[0].sales_order_item_id
+        }
+        if soi_id_by_order:
+            sois_fb = (
+                db.query(SalesOrderItem)
+                .options(joinedload(SalesOrderItem.quote_item))
+                .filter(SalesOrderItem.id.in_(soi_id_by_order.values()))
+                .all()
+            )
+            soi_fb_map = {s.id: s for s in sois_fb}
+            for oid, soi_id in soi_id_by_order.items():
+                soi = soi_fb_map.get(soi_id)
+                if soi and soi.quote_item:
+                    order_fallback_prices[oid] = (soi.quote_item.gia_phoi, soi.quote_item.gia_noi_bo)
+
     # Lấy thông tin Kho
     wh_ids = list({k[1] for k in stats.keys()})
     warehouses = db.query(Warehouse).options(
@@ -756,6 +779,18 @@ def ton_kho_lsx(
             the_tich = phoi_area * standard_thickness_m(to_hop)
 
         co_in = any(it.loai_in in ("flexo", "ky_thuat_so") for it in order.items) if order.items else False
+
+        # don_gia_noi_bo: từ LSX hoặc fallback từ QuoteItem (gia_phoi / gia_noi_bo theo loại kho)
+        if order.don_gia_noi_bo:
+            _don_gia = float(order.don_gia_noi_bo)
+        elif order_id in order_fallback_prices:
+            _use_tp = (wh.loai_kho or "").upper() == "TP"
+            _fp, _fnb = order_fallback_prices[order_id]
+            _pick = _fnb if _use_tp else _fp
+            _don_gia = float(_pick) if _pick and _pick > 0 else None
+        else:
+            _don_gia = None
+
         result.append({
             "production_order_id": order_id,
             "so_lenh": order.so_lenh,
@@ -769,7 +804,7 @@ def ton_kho_lsx(
             "ton_kho_tai_nguon": max(0.0, round(data["nhap"] + tra_khach - data["chuyen_di"], 3)),
             "ton_kho_tai_cd2": max(0.0, round(data["chuyen_den"] - data["xuat"], 3)),
             "co_in": co_in,
-            "don_gia_noi_bo": float(order.don_gia_noi_bo) if order.don_gia_noi_bo else None,
+            "don_gia_noi_bo": _don_gia,
             "warehouse_id": wh_id,
             "ten_kho": wh.ten_kho,
             "chieu_kho": data["chieu_kho"],
