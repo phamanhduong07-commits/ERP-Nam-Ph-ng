@@ -769,11 +769,9 @@ export default function KhoPhoiPage() {
                       }}
                       onRow={(row) => ({
                         onClick: () => {
-                          const daChuyen = (row.tong_chuyen_phoi ?? 0) > 0
-                          const whId = (row.cong_doan === 'cd2' && daChuyen)
-                            ? (findPhoiKho(row.phan_xuong_id)?.id ?? row.warehouse_id)
-                            : row.warehouse_id
-                          if (whId) setDetailWhId(whId)
+                          if (row.production_order_id) {
+                            navigate(`/production/orders/${row.production_order_id}`)
+                          }
                         },
                         style: { cursor: 'pointer' },
                       })}
