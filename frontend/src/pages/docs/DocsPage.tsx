@@ -1129,6 +1129,7 @@ export default function DocsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editorContent, setEditorContent] = useState('');
   const [editTitle, setEditTitle] = useState('');
+  const [useRawHtml, setUseRawHtml] = useState(false);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   
   const isAdmin = true; // Giả lập quyền Admin
@@ -1323,6 +1324,7 @@ export default function DocsPage() {
                     <Button icon={<EditOutlined />} onClick={() => {
                       setEditTitle(activeDoc.title);
                       setEditorContent(activeDoc.content);
+                      setUseRawHtml(activeDoc.content.includes('<pre'));
                       setIsEditing(true);
                     }}>
                       Chỉnh sửa (Dán ảnh)
@@ -1333,18 +1335,47 @@ export default function DocsPage() {
             </div>
 
             {isEditing ? (
-              <div style={{ height: '700px', marginBottom: 50 }}>
-                <div style={{ marginBottom: 16, color: '#666', fontStyle: 'italic' }}>
-                  * Mẹo viết bài để có Layout 2 cột: Hãy viết Tiêu đề (VD: Bước 1) -&gt; <b>Nhấn Enter, dán ảnh vào ngay bên dưới</b> -&gt; Xuống dòng gõ chữ bình thường. Khi lưu, hệ thống tự động đẩy ảnh sang phải!
+              <div style={{ marginBottom: 50 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ color: '#666', fontStyle: 'italic', fontSize: 13 }}>
+                    {useRawHtml
+                      ? '⚠️ Chế độ HTML thô — chỉnh sửa trực tiếp mã HTML, format được giữ nguyên.'
+                      : '* Mẹo: Tiêu đề → Enter → Dán ảnh → xuống dòng gõ chữ. Hệ thống tự đẩy ảnh sang phải!'}
+                  </div>
+                  <button
+                    onClick={() => setUseRawHtml(v => !v)}
+                    style={{
+                      padding: '4px 12px', fontSize: 12, cursor: 'pointer',
+                      border: '1px solid #d9d9d9', borderRadius: 4,
+                      background: useRawHtml ? '#fff7e6' : '#f6f8fa', color: '#555'
+                    }}
+                  >
+                    {useRawHtml ? '🎨 Chuyển Rich Editor' : '</> Chuyển HTML thô'}
+                  </button>
                 </div>
-                <ReactQuill 
-                  theme="snow" 
-                  value={editorContent} 
-                  onChange={setEditorContent} 
-                  modules={quillModules}
-                  style={{ height: '100%', fontSize: 16 }}
-                  placeholder="Gõ tiêu đề, nhấn enter rồi Ctrl+V để dán ảnh..."
-                />
+                {useRawHtml ? (
+                  <textarea
+                    value={editorContent}
+                    onChange={e => setEditorContent(e.target.value)}
+                    style={{
+                      width: '100%', height: 700, fontFamily: 'monospace', fontSize: 13,
+                      lineHeight: 1.5, padding: 12, border: '1px solid #d9d9d9',
+                      borderRadius: 6, resize: 'vertical', outline: 'none',
+                      background: '#fafafa', color: '#222'
+                    }}
+                  />
+                ) : (
+                  <div style={{ height: 700 }}>
+                    <ReactQuill
+                      theme="snow"
+                      value={editorContent}
+                      onChange={setEditorContent}
+                      modules={quillModules}
+                      style={{ height: '100%', fontSize: 16 }}
+                      placeholder="Gõ tiêu đề, nhấn enter rồi Ctrl+V để dán ảnh..."
+                    />
+                  </div>
+                )}
               </div>
             ) : (
               <div 
