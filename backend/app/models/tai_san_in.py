@@ -23,6 +23,14 @@ class TaiSanIn(Base):
     # khach_hang | cong_ty
     gia_tri: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
 
+    # NCC làm bản in / khuôn bế và mã NVL tương ứng trong hệ thống vật tư
+    supplier_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    other_material_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("other_materials.id", ondelete="SET NULL"), nullable=True
+    )
+
     # Liên thông mua hàng NCC
     purchase_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"), index=True)
 
@@ -49,6 +57,8 @@ class TaiSanIn(Base):
     )
 
     customer = relationship("Customer", foreign_keys=[customer_id])
+    supplier = relationship("Supplier", foreign_keys=[supplier_id])
+    other_material = relationship("OtherMaterial", foreign_keys=[other_material_id])
     purchase_order = relationship("PurchaseOrder", foreign_keys=[purchase_order_id])
     sales_order_thu = relationship("SalesOrder", foreign_keys=[sales_order_thu_id])
     cash_payment_hoan = relationship("CashPayment", foreign_keys=[cash_payment_hoan_id])

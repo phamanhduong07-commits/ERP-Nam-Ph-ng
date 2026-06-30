@@ -56,11 +56,15 @@ class PurchaseRequisitionItem(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     loai_item: Mapped[str] = mapped_column(String(20), default="nvl")  # nvl | ban_in | khuon_be
     san_pham_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    tai_san_in_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("tai_san_in.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     ymh: Mapped["PurchaseRequisition"] = relationship("PurchaseRequisition", back_populates="items")
     paper_material = relationship("PaperMaterial")
     other_material = relationship("OtherMaterial")
     san_pham = relationship("Product")
+    tai_san_in = relationship("TaiSanIn", foreign_keys=[tai_san_in_id])
 
 
 class CongCuSanXuat(Base):

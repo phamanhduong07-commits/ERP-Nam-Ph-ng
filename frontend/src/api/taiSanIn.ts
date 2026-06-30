@@ -23,6 +23,10 @@ export interface TaiSanInItem {
   ten_khach: string | null
   nguoi_chi_tra: TaiSanNguoiChiTra
   gia_tri: number
+  supplier_id: number | null
+  ten_ncc: string | null
+  other_material_id: number | null
+  ma_nvl: string | null
   trang_thai: TaiSanTrangThai
   da_thu_tien: boolean
   da_hoan_tien: boolean
@@ -51,6 +55,8 @@ export interface TaiSanInCreate {
   customer_id: number
   nguoi_chi_tra?: TaiSanNguoiChiTra
   gia_tri?: number
+  supplier_id?: number | null
+  other_material_id?: number | null
   purchase_order_id?: number | null
   sales_order_thu_id?: number | null
   da_thu_tien?: boolean
@@ -137,4 +143,13 @@ export const taiSanInApi = {
 
   bySanPham: (sanPhamId: number) =>
     client.get<TaiSanInItem[]>(`/tai-san-in/by-san-pham/${sanPhamId}`),
+
+  taoYmh: (data: {
+    ids: number[]
+    ngay_yeu_cau: string
+    phap_nhan_id: number
+    phan_xuong_id?: number | null
+    ghi_chu?: string | null
+  }) =>
+    client.post<{ ymh_id: number; so_ymh: string }>('/tai-san-in/tao-ymh', data),
 }

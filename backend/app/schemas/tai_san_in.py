@@ -14,6 +14,8 @@ class TaiSanInCreate(BaseModel):
     customer_id: int
     nguoi_chi_tra: str = "khach_hang"
     gia_tri: Decimal = Decimal("0")
+    supplier_id: int | None = None
+    other_material_id: int | None = None
     purchase_order_id: int | None = None
     sales_order_thu_id: int | None = None
     da_thu_tien: bool = False
@@ -50,6 +52,8 @@ class TaiSanInUpdate(BaseModel):
     mo_ta: str | None = None
     nguoi_chi_tra: str | None = None
     gia_tri: Decimal | None = None
+    supplier_id: int | None = None
+    other_material_id: int | None = None
     purchase_order_id: int | None = None
     sales_order_thu_id: int | None = None
     da_thu_tien: bool | None = None
@@ -102,6 +106,11 @@ class TaiSanInResponse(BaseModel):
     ten_khach: str | None = None
     nguoi_chi_tra: str
     gia_tri: Decimal
+    supplier_id: int | None = None
+    ten_ncc: str | None = None
+    other_material_id: int | None = None
+    ma_nvl: str | None = None
+    ten_nvl: str | None = None
     purchase_order_id: int | None
     so_po: str | None = None
     sales_order_thu_id: int | None
@@ -132,6 +141,10 @@ class TaiSanInListResponse(BaseModel):
     ten_khach: str | None = None
     nguoi_chi_tra: str
     gia_tri: Decimal
+    supplier_id: int | None = None
+    ten_ncc: str | None = None
+    other_material_id: int | None = None
+    ma_nvl: str | None = None
     trang_thai: str
     da_thu_tien: bool
     da_hoan_tien: bool

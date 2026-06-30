@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
-  Select, Tag, message, DatePicker, Row, Col,
+  Select, Tag, message, DatePicker, Row, Col, Typography,
 } from 'antd'
-import { PlusOutlined, EyeOutlined } from '@ant-design/icons'
+import { PlusOutlined, EyeOutlined, FileAddOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
@@ -15,6 +15,12 @@ import {
   type TaiSanLoai, type TaiSanTrangThai,
 } from '../../api/taiSanIn'
 import { customersApi } from '../../api/customers'
+import { suppliersApi } from '../../api/suppliers'
+import { otherMaterialsApi } from '../../api/otherMaterials'
+import { phapNhanApi } from '../../api/phap-nhan'
+import { warehouseApi } from '../../api/warehouse'
+
+const { Text } = Typography
 
 const LOAI_OPTIONS = [
   { value: 'ban_in', label: 'Bản in' },
@@ -39,7 +45,10 @@ export default function TaiSanInList() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [form] = Form.useForm()
+  const [ymhForm] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
+  const [ymhModalOpen, setYmhModalOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [filterLoai, setFilterLoai] = useState<TaiSanLoai | undefined>()
   const [filterKh, setFilterKh] = useState<number | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<TaiSanTrangThai | undefined>()
@@ -61,6 +70,26 @@ export default function TaiSanInList() {
     queryFn: () => customersApi.all().then(r => r.data),
   })
 
+  const { data: supplierList = [] } = useQuery({
+    queryKey: ['suppliers-all'],
+    queryFn: () => suppliersApi.all().then(r => r.data),
+  })
+
+  const { data: nvlList = [] } = useQuery({
+    queryKey: ['other-materials-search-all'],
+    queryFn: () => otherMaterialsApi.search({ limit: 500 }).then(r => r.data),
+  })
+
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan-all'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+  })
+
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong-all'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+  })
+
   const createMut = useMutation({
     mutationFn: (d: TaiSanInCreate) => taiSanInApi.create(d),
     onSuccess: (res) => {
@@ -72,6 +101,29 @@ export default function TaiSanInList() {
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi tạo'),
   })
+
+  const taoYmhMut = useMutation({
+    mutationFn: (d: Parameters<typeof taiSanInApi.taoYmh>[0]) => taiSanInApi.taoYmh(d),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['tai-san-in'] })
+      setYmhModalOpen(false)
+      ymhForm.resetFields()
+      setSelectedIds([])
+      message.success(`Đã tạo YCMH ${res.data.so_ymh}`)
+      navigate('/purchasing/ymh')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi tạo YCMH'),
+  })
+
+  const selectedRows = rows.filter(r => selectedIds.includes(r.id))
+
+  const rowSelection = {
+    selectedRowKeys: selectedIds,
+    onChange: (keys: React.Key[]) => setSelectedIds(keys as number[]),
+    getCheckboxProps: (record: TaiSanInItem) => ({
+      disabled: record.trang_thai !== 'cho_mua',
+    }),
+  }
 
   const columns: ColumnsType<TaiSanInItem> = [
     { title: 'Mã', dataIndex: 'ma_tai_san', width: 140, fixed: 'left' },
@@ -85,6 +137,8 @@ export default function TaiSanInList() {
     },
     { title: 'Mô tả', dataIndex: 'mo_ta', ellipsis: true },
     { title: 'Khách hàng', dataIndex: 'ten_khach', width: 160 },
+    { title: 'NCC', dataIndex: 'ten_ncc', width: 140, ellipsis: true },
+    { title: 'Mã NVL', dataIndex: 'ma_nvl', width: 110 },
     {
       title: 'Người chi trả',
       dataIndex: 'nguoi_chi_tra',
@@ -143,9 +197,20 @@ export default function TaiSanInList() {
     <Card
       title="Bản in / Khuôn bế"
       extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-          Thêm mới
-        </Button>
+        <Space>
+          {selectedIds.length > 0 && (
+            <Button
+              type="primary"
+              icon={<FileAddOutlined />}
+              onClick={() => setYmhModalOpen(true)}
+            >
+              Lập YCMH ({selectedIds.length})
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+            Thêm mới
+          </Button>
+        </Space>
       }
     >
       {/* Bộ lọc */}
@@ -197,9 +262,10 @@ export default function TaiSanInList() {
         dataSource={rows}
         rowKey="id"
         loading={isLoading}
-        scroll={{ x: 1000 }}
+        scroll={{ x: 1200 }}
         size="small"
         pagination={{ pageSize: 50, showSizeChanger: false }}
+        rowSelection={rowSelection}
       />
 
       {/* Modal tạo mới */}
@@ -209,7 +275,7 @@ export default function TaiSanInList() {
         onCancel={() => { setModalOpen(false); form.resetFields() }}
         onOk={() => form.submit()}
         confirmLoading={createMut.isPending}
-        width={520}
+        width={560}
       >
         <Form
           form={form}
@@ -241,8 +307,108 @@ export default function TaiSanInList() {
           <Form.Item name="gia_tri" label="Giá trị (đ)">
             <InputNumber style={{ width: '100%' }} formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} min={0} />
           </Form.Item>
+          <Form.Item name="supplier_id" label="NCC làm bản in / khuôn bế">
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Chọn nhà cung cấp"
+              options={supplierList.map((s: any) => ({ value: s.id, label: s.ten_viet_tat }))}
+            />
+          </Form.Item>
+          <Form.Item name="other_material_id" label="Mã NVL (danh mục vật tư)">
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Chọn mã NVL"
+              options={nvlList.map((m: any) => ({ value: m.id, label: `${m.value} — ${m.ten}` }))}
+            />
+          </Form.Item>
           <Form.Item name="ngay_tao" label="Ngày tạo" rules={[{ required: true }]}>
             <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+          </Form.Item>
+          <Form.Item name="ghi_chu" label="Ghi chú">
+            <Input.TextArea rows={2} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Modal lập YCMH */}
+      <Modal
+        title="Lập YCMH từ Bản in / Khuôn bế"
+        open={ymhModalOpen}
+        onCancel={() => { setYmhModalOpen(false); ymhForm.resetFields() }}
+        onOk={() => ymhForm.submit()}
+        confirmLoading={taoYmhMut.isPending}
+        width={520}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <Text type="secondary">Đã chọn {selectedIds.length} tài sản: </Text>
+          <Text>{selectedRows.map(r => r.ma_tai_san).join(', ')}</Text>
+        </div>
+        <Form
+          form={ymhForm}
+          layout="vertical"
+          initialValues={{ ngay_yeu_cau: dayjs() }}
+          onFinish={(v) =>
+            taoYmhMut.mutate({
+              ids: selectedIds,
+              ngay_yeu_cau: dayjs(v.ngay_yeu_cau).format('YYYY-MM-DD'),
+              phap_nhan_id: v.phap_nhan_id,
+              phan_xuong_id: v.phan_xuong_id || null,
+              ghi_chu: v.ghi_chu || null,
+            })
+          }
+        >
+          <Form.Item
+            name="ngay_yeu_cau"
+            label="Ngày yêu cầu"
+            rules={[{ required: true, message: 'Chọn ngày yêu cầu' }]}
+          >
+            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+          </Form.Item>
+          <Form.Item
+            name="phap_nhan_id"
+            label="Pháp nhân"
+            rules={[{ required: true, message: 'Pháp nhân là bắt buộc' }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="Chọn pháp nhân"
+              options={phapNhanList.map((p: any) => ({
+                value: p.id,
+                label: p.ten_viet_tat || p.ten_phap_nhan,
+              }))}
+              onChange={(val) => {
+                // clear phan_xuong nếu không thuộc pháp nhân này
+                ymhForm.setFieldValue('phan_xuong_id', undefined)
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="phan_xuong_id"
+            label="Phân xưởng (tuỳ chọn)"
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Chọn phân xưởng"
+              options={phanXuongList.map((px: any) => ({
+                value: px.id,
+                label: px.ten_xuong,
+              }))}
+              onChange={(val) => {
+                if (val) {
+                  const px = phanXuongList.find((p: any) => p.id === val)
+                  if (px?.phap_nhan_id) {
+                    ymhForm.setFieldValue('phap_nhan_id', px.phap_nhan_id)
+                  }
+                }
+              }}
+            />
           </Form.Item>
           <Form.Item name="ghi_chu" label="Ghi chú">
             <Input.TextArea rows={2} />

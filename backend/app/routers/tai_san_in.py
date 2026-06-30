@@ -1,14 +1,16 @@
 from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Customer, Product
+from app.models.master import Customer, OtherMaterial, PhanXuong, PhapNhan, Product, Supplier
 from app.models.purchase import PurchaseOrder
+from app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem
 from app.models.sales import SalesOrder, SalesOrderItem
 from app.models.accounting import CashPayment
 from app.models.tai_san_in import TaiSanIn, TaiSanInSanPham
@@ -73,11 +75,99 @@ def _build_response(db: Session, obj: TaiSanIn) -> dict:
     return {
         **{c.name: getattr(obj, c.name) for c in obj.__table__.columns},
         "ten_khach": obj.customer.ten_viet_tat if obj.customer else None,
+        "ten_ncc": obj.supplier.ten_viet_tat if obj.supplier else None,
+        "ma_nvl": obj.other_material.ma_chinh if obj.other_material else None,
+        "ten_nvl": obj.other_material.ten if obj.other_material else None,
         "so_po": obj.purchase_order.so_po if obj.purchase_order else None,
         "so_don_thu": obj.sales_order_thu.so_don if obj.sales_order_thu else None,
         "san_luong_thuc_te": san_luong,
         "san_pham_links": links,
     }
+
+
+# ─── TAO-YMH (phải đứng trước các route /{tai_san_id}) ────────────────────────
+
+class TaoYMHBody(BaseModel):
+    ids: list[int]
+    ngay_yeu_cau: date
+    phap_nhan_id: int
+    phan_xuong_id: int | None = None
+    ghi_chu: str | None = None
+
+
+def _gen_so_ymh_local(db: Session) -> str:
+    from datetime import datetime, timezone
+    ym = datetime.now(timezone.utc).strftime("%Y%m")
+    prefix = f"YMH-{ym}-"
+    last = (
+        db.query(PurchaseRequisition)
+        .filter(PurchaseRequisition.so_ymh.like(f"{prefix}%"))
+        .order_by(PurchaseRequisition.id.desc())
+        .first()
+    )
+    seq = 1
+    if last:
+        try:
+            seq = int(last.so_ymh.rsplit("-", 1)[-1]) + 1
+        except ValueError:
+            pass
+    return f"{prefix}{seq:04d}"
+
+
+@router.post("/tao-ymh", status_code=201)
+def tao_ymh_tu_tai_san_in(
+    body: TaoYMHBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not body.ids:
+        raise HTTPException(400, "Phải chọn ít nhất 1 tài sản")
+    if not db.get(PhapNhan, body.phap_nhan_id):
+        raise HTTPException(400, "Pháp nhân không tồn tại")
+    if body.phan_xuong_id and not db.get(PhanXuong, body.phan_xuong_id):
+        raise HTTPException(400, "Phân xưởng không tồn tại")
+
+    objs = (
+        db.query(TaiSanIn)
+        .options(selectinload(TaiSanIn.san_pham_links))
+        .filter(TaiSanIn.id.in_(body.ids))
+        .all()
+    )
+    if len(objs) != len(body.ids):
+        raise HTTPException(404, "Một số tài sản không tồn tại")
+    not_cho_mua = [o.ma_tai_san for o in objs if o.trang_thai != "cho_mua"]
+    if not_cho_mua:
+        raise HTTPException(400, f"Các tài sản sau không ở trạng thái Chờ mua: {', '.join(not_cho_mua)}")
+
+    ymh = PurchaseRequisition(
+        so_ymh=_gen_so_ymh_local(db),
+        ngay_yeu_cau=body.ngay_yeu_cau,
+        phap_nhan_id=body.phap_nhan_id,
+        phan_xuong_id=body.phan_xuong_id,
+        trang_thai="nhap",
+        ghi_chu=body.ghi_chu,
+        nguoi_yeu_cau_id=current_user.id,
+    )
+    db.add(ymh)
+    db.flush()
+
+    for obj in objs:
+        san_pham_id = obj.san_pham_links[0].san_pham_id if obj.san_pham_links else None
+        db.add(PurchaseRequisitionItem(
+            ymh_id=ymh.id,
+            loai_item=obj.loai,
+            ten_hang=obj.mo_ta or obj.ma_tai_san,
+            so_luong=Decimal("1"),
+            dvt="Cái",
+            don_gia_du_kien=obj.gia_tri or Decimal("0"),
+            san_pham_id=san_pham_id,
+            tai_san_in_id=obj.id,
+        ))
+        obj.trang_thai = "dang_mua"
+
+    db.commit()
+    db.refresh(ymh)
+    return {"ymh_id": ymh.id, "so_ymh": ymh.so_ymh}
 
 
 # ─── LIST ──────────────────────────────────────────────────────────────────────
@@ -94,7 +184,12 @@ def list_tai_san_in(
 ):
     q = (
         db.query(TaiSanIn)
-        .options(selectinload(TaiSanIn.customer), selectinload(TaiSanIn.san_pham_links))
+        .options(
+            selectinload(TaiSanIn.customer),
+            selectinload(TaiSanIn.supplier),
+            selectinload(TaiSanIn.other_material),
+            selectinload(TaiSanIn.san_pham_links),
+        )
         .order_by(TaiSanIn.id.desc())
     )
     if loai:
@@ -121,6 +216,10 @@ def list_tai_san_in(
             ten_khach=obj.customer.ten_viet_tat if obj.customer else None,
             nguoi_chi_tra=obj.nguoi_chi_tra,
             gia_tri=obj.gia_tri,
+            supplier_id=obj.supplier_id,
+            ten_ncc=obj.supplier.ten_viet_tat if obj.supplier else None,
+            other_material_id=obj.other_material_id,
+            ma_nvl=obj.other_material.ma_chinh if obj.other_material else None,
             trang_thai=obj.trang_thai,
             da_thu_tien=obj.da_thu_tien,
             da_hoan_tien=obj.da_hoan_tien,
@@ -142,6 +241,10 @@ def create_tai_san_in(
 ):
     if not db.get(Customer, data.customer_id):
         raise HTTPException(404, "Không tìm thấy khách hàng")
+    if data.supplier_id and not db.get(Supplier, data.supplier_id):
+        raise HTTPException(404, "Không tìm thấy nhà cung cấp")
+    if data.other_material_id and not db.get(OtherMaterial, data.other_material_id):
+        raise HTTPException(404, "Không tìm thấy mã NVL")
     if data.purchase_order_id and not db.get(PurchaseOrder, data.purchase_order_id):
         raise HTTPException(404, "Không tìm thấy đơn mua hàng")
     if data.sales_order_thu_id and not db.get(SalesOrder, data.sales_order_thu_id):
@@ -157,7 +260,7 @@ def create_tai_san_in(
     db.add(obj)
     db.commit()
     db.refresh(obj)
-    db.refresh(obj, attribute_names=["customer", "purchase_order", "sales_order_thu", "san_pham_links"])
+    db.refresh(obj, attribute_names=["customer", "supplier", "other_material", "purchase_order", "sales_order_thu", "san_pham_links"])
     return TaiSanInResponse(**_build_response(db, obj))
 
 
@@ -173,6 +276,8 @@ def get_tai_san_in(
         db.query(TaiSanIn)
         .options(
             selectinload(TaiSanIn.customer),
+            selectinload(TaiSanIn.supplier),
+            selectinload(TaiSanIn.other_material),
             selectinload(TaiSanIn.purchase_order),
             selectinload(TaiSanIn.sales_order_thu),
             selectinload(TaiSanIn.cash_payment_hoan),
@@ -204,7 +309,7 @@ def update_tai_san_in(
 
     db.commit()
     db.refresh(obj)
-    db.refresh(obj, attribute_names=["customer", "purchase_order", "sales_order_thu", "san_pham_links"])
+    db.refresh(obj, attribute_names=["customer", "supplier", "other_material", "purchase_order", "sales_order_thu", "san_pham_links"])
     return TaiSanInResponse(**_build_response(db, obj))
 
 

@@ -206,6 +206,7 @@ def _serialize_ymh(ymh: PurchaseRequisition, db: Session) -> dict:
                 "loai_item": it.loai_item if it.loai_item else "nvl",
                 "san_pham_id": it.san_pham_id,
                 "ten_san_pham": ten_san_pham,
+                "tai_san_in_id": it.tai_san_in_id,
             }
         )
 
@@ -618,6 +619,15 @@ def tao_po_tu_ymh(
     po.tong_tien = tong_tien
     ymh.po_id = po.id
     ymh.trang_thai = "tao_po"
+
+    # Cập nhật purchase_order_id cho TaiSanIn liên kết qua ymh item
+    from app.models.tai_san_in import TaiSanIn as TaiSanInModel
+    for item in ymh.items:
+        if item.tai_san_in_id:
+            ts = db.get(TaiSanInModel, item.tai_san_in_id)
+            if ts:
+                ts.purchase_order_id = po.id
+
     db.commit()
     db.refresh(po)
     return {"ok": True, "po_id": po.id, "so_po": po.so_po, "trang_thai": ymh.trang_thai}
