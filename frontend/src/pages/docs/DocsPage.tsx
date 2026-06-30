@@ -1136,7 +1136,7 @@ export default function DocsPage() {
 
   useEffect(() => {
     // Đổi key để ép tải lại dữ liệu mới nhất
-    const saved = storage.get<DocItem[]>('erp_docs_v8');
+    const saved = storage.get<DocItem[]>('erp_docs_v9');
     if (saved) {
       setDocs(saved);
       if (saved.length > 0) setActiveDoc(saved[0]);
@@ -1216,7 +1216,7 @@ export default function DocsPage() {
 
   const saveToLocal = (newDocs: DocItem[]) => {
     setDocs(newDocs);
-    storage.set('erp_docs_v8', newDocs, { ttl: TTL.MONTH });  // cache tài liệu 30 ngày
+    storage.set('erp_docs_v9', newDocs, { ttl: TTL.MONTH });  // cache tài liệu 30 ngày
   };
 
   const handlePreviewClick = (e: React.MouseEvent) => {
