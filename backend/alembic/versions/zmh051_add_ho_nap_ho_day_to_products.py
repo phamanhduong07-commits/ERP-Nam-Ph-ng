@@ -1,4 +1,4 @@
-"""add ho_nap and ho_day to products
+"""add ho_mo, ho_nap, ho_day to products
 
 Revision ID: zmh051
 Revises: zmh050
@@ -14,10 +14,12 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('products', sa.Column('ho_nap', sa.Boolean(), nullable=True, server_default='0'))
-    op.add_column('products', sa.Column('ho_day', sa.Boolean(), nullable=True, server_default='0'))
+    op.add_column('products', sa.Column('ho_mo',  sa.Boolean(), nullable=True))
+    op.add_column('products', sa.Column('ho_nap', sa.Float(),   nullable=True))
+    op.add_column('products', sa.Column('ho_day', sa.Float(),   nullable=True))
 
 
 def downgrade():
+    op.drop_column('products', 'ho_mo')
     op.drop_column('products', 'ho_nap')
     op.drop_column('products', 'ho_day')

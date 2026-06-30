@@ -4,7 +4,7 @@ import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
-  Select, Tag, message, Typography, Row, Col, Switch, Tabs,
+  Select, Tag, message, Typography, Row, Col, Switch, Tabs, Checkbox,
 } from 'antd'
 import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -135,7 +135,7 @@ export default function ProductList() {
       be_so_con: 0,
       can_mang: 0,
       khong_tinh_nxt: false,
-      be_hai_manh: false, ho_nap: false, ho_day: false, co_be: false, be_lo: false, do_kho: false, do_phu: false,
+      be_hai_manh: false, ho_mo: false, co_be: false, be_lo: false, do_kho: false, do_phu: false,
       co_tem_offset: false,
       tem_sp_per_to: 1, tem_waste_to: 0, tem_so_mau: 0,
       tem_co_can_mang: false, tem_co_khuon_be: false, tem_co_uv: false,
@@ -200,8 +200,9 @@ export default function ProductList() {
       to_hop_song: vals.to_hop_song ?? null,
       loai_be: vals.loai_be ?? null,
       be_hai_manh: vals.be_hai_manh ?? false,
-      ho_nap: vals.ho_nap ?? false,
-      ho_day: vals.ho_day ?? false,
+      ho_mo: vals.ho_mo ?? null,
+      ho_nap: vals.ho_nap ?? null,
+      ho_day: vals.ho_day ?? null,
       co_be: vals.co_be ?? false,
       be_lo: vals.be_lo ?? false,
       do_kho: vals.do_kho ?? false,
@@ -555,9 +556,47 @@ export default function ProductList() {
 
                   <Row gutter={12}>
                     <Col span={4}><Form.Item label="Bế 2 mảnh" name="be_hai_manh" valuePropName="checked"><Switch /></Form.Item></Col>
-                    <Col span={4}><Form.Item label="Hở nắp" name="ho_nap" valuePropName="checked"><Switch /></Form.Item></Col>
-                    <Col span={4}><Form.Item label="Hở đáy" name="ho_day" valuePropName="checked"><Switch /></Form.Item></Col>
                     <Col span={4}><Form.Item label="Có bế" name="co_be" valuePropName="checked"><Switch /></Form.Item></Col>
+                  </Row>
+
+                  <Form.Item noStyle shouldUpdate={(p, c) => p.loai_thung !== c.loai_thung}>
+                    {({ getFieldValue, setFieldsValue }) => getFieldValue('loai_thung') === 'A1' && (
+                      <>
+                        <Form.Item name="ho_mo" valuePropName="checked" style={{ marginBottom: 8 }}>
+                          <Checkbox onChange={e => { if (!e.target.checked) setFieldsValue({ ho_nap: null, ho_day: null }) }}>
+                            Hở nắp / Hở đáy
+                          </Checkbox>
+                        </Form.Item>
+                        <Form.Item noStyle shouldUpdate={(p, c) => p.ho_mo !== c.ho_mo || p.rong !== c.rong || p.ho_nap !== c.ho_nap || p.ho_day !== c.ho_day}>
+                          {({ getFieldValue: gfv }) => gfv('ho_mo') && (
+                            <Row gutter={12} style={{ marginBottom: 12 }}>
+                              <Col span={6}>
+                                <Form.Item label="Hở nắp (cm)" name="ho_nap">
+                                  <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={6}>
+                                <Form.Item label="Hở đáy (cm)" name="ho_day">
+                                  <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
+                                </Form.Item>
+                              </Col>
+                              {gfv('rong') != null && (
+                                <Col span={12} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 24 }}>
+                                  <Typography.Text style={{ fontSize: 11, color: '#888' }}>
+                                    Cánh T: {(((gfv('rong') ?? 0) / 2) - ((gfv('ho_nap') ?? 0) / 2)).toFixed(1)} cm
+                                    &nbsp;|&nbsp;
+                                    Cánh D: {(((gfv('rong') ?? 0) / 2) - ((gfv('ho_day') ?? 0) / 2)).toFixed(1)} cm
+                                  </Typography.Text>
+                                </Col>
+                              )}
+                            </Row>
+                          )}
+                        </Form.Item>
+                      </>
+                    )}
+                  </Form.Item>
+
+                  <Row gutter={12}>
                     <Col span={4}><Form.Item label="Bế lỗ" name="be_lo" valuePropName="checked"><Switch /></Form.Item></Col>
                     <Col span={4}><Form.Item label="Độ khô" name="do_kho" valuePropName="checked"><Switch /></Form.Item></Col>
                     <Col span={4}><Form.Item label="Độ phủ" name="do_phu" valuePropName="checked"><Switch /></Form.Item></Col>

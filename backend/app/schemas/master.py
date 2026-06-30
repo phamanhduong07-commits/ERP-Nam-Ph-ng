@@ -122,8 +122,9 @@ class ProductBase(BaseModel):
     to_hop_song: str | None = None
     loai_be: str | None = None
     be_hai_manh: bool = False
-    ho_nap: bool = False
-    ho_day: bool = False
+    ho_mo: bool | None = None
+    ho_nap: float | None = None
+    ho_day: float | None = None
     co_be: bool = False
     be_lo: bool = False
     do_kho: bool = False
@@ -199,8 +200,9 @@ class ProductUpdate(BaseModel):
     to_hop_song: str | None = None
     loai_be: str | None = None
     be_hai_manh: bool | None = None
-    ho_nap: bool | None = None
-    ho_day: bool | None = None
+    ho_mo: bool | None = None
+    ho_nap: float | None = None
+    ho_day: float | None = None
     co_be: bool | None = None
     be_lo: bool | None = None
     do_kho: bool | None = None

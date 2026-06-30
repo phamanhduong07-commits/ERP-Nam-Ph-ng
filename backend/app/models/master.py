@@ -378,8 +378,9 @@ class Product(Base):
     to_hop_song: Mapped[str | None] = mapped_column(String(10))         # A, B, C, E, AB, BC...
     loai_be: Mapped[str | None] = mapped_column(String(30))             # be_tay, be_tu_dong_3/5/7
     be_hai_manh: Mapped[bool] = mapped_column(Boolean, default=False)   # bế 2 mảnh
-    ho_nap: Mapped[bool] = mapped_column(Boolean, default=False)        # hở nắp
-    ho_day: Mapped[bool] = mapped_column(Boolean, default=False)        # hở đáy
+    ho_mo: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # có hở nắp/đáy
+    ho_nap: Mapped[float | None] = mapped_column(Float, nullable=True)  # hở nắp (cm)
+    ho_day: Mapped[float | None] = mapped_column(Float, nullable=True)  # hở đáy (cm)
     co_be: Mapped[bool] = mapped_column(Boolean, default=False)         # có bế khuôn
     be_lo: Mapped[bool] = mapped_column(Boolean, default=False)         # bế lỗ
     do_kho: Mapped[bool] = mapped_column(Boolean, default=False)        # hàng khó
