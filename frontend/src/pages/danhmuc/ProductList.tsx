@@ -4,7 +4,7 @@ import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
-  Select, Tag, message, Typography, Row, Col, Switch,
+  Select, Tag, message, Typography, Row, Col, Switch, Tabs,
 } from 'antd'
 import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -19,6 +19,39 @@ import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 const { Title } = Typography
 
 const SO_LOP_OPTIONS = [1, 3, 5, 7]
+
+const LOAI_IN_OPTIONS = [
+  { value: 0, label: 'Không in' },
+  { value: 1, label: 'In Flexo' },
+  { value: 2, label: 'In kỹ thuật số' },
+]
+
+const LOAI_LAN_OPTIONS = [
+  { value: 'bang', label: 'Bằng' },
+  { value: 'am_duong', label: 'Âm dương' },
+]
+
+const CHONG_THAM_OPTIONS = [
+  { value: 0, label: 'Không' },
+  { value: 1, label: '1 mặt' },
+  { value: 2, label: '2 mặt' },
+]
+
+const CAN_MANG_OPTIONS = [
+  { value: 0, label: 'Không' },
+  { value: 1, label: 'Mặt trong' },
+  { value: 2, label: 'Mặt ngoài' },
+]
+
+const PAPER_LAYERS = [
+  { label: 'Mặt ngoài', code: 'mat',    dl: 'mat_dl' },
+  { label: 'Sóng 1',    code: 'song_1', dl: 'song_1_dl' },
+  { label: 'Mặt 1',     code: 'mat_1',  dl: 'mat_1_dl' },
+  { label: 'Sóng 2',    code: 'song_2', dl: 'song_2_dl' },
+  { label: 'Mặt 2',     code: 'mat_2',  dl: 'mat_2_dl' },
+  { label: 'Sóng 3',    code: 'song_3', dl: 'song_3_dl' },
+  { label: 'Mặt trong', code: 'mat_3',  dl: 'mat_3_dl' },
+] as const
 
 const LOAI_THUNG_GROUPED = [
   { label: 'Thùng', options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Thùng') },
@@ -88,13 +121,24 @@ export default function ProductList() {
       so_mau: 0,
       gia_ban: 0,
       dvt: 'Cái',
+      loai_in: 0,
+      chap_xa: false,
+      chong_tham: 0,
+      boi: false,
+      be_so_con: 0,
+      can_mang: 0,
+      khong_tinh_nxt: false,
     })
     setModalOpen(true)
   }
 
   const openEdit = (row: ProductFull) => {
     setEditing(row)
-    form.setFieldsValue({ ...row })
+    form.setFieldsValue({
+      ...row,
+      chap_xa: row.chap_xa === 1,
+      boi: row.boi === 1,
+    })
     setModalOpen(true)
   }
 
@@ -119,21 +163,21 @@ export default function ProductList() {
       gia_ban: vals.gia_ban ?? 0,
       ghim: vals.ghim ?? false,
       dan: vals.dan ?? false,
-      loai_in: editing?.loai_in ?? 0,
-      chap_xa: editing?.chap_xa ?? 0,
-      loai_lan: editing?.loai_lan ?? null,
+      loai_in: vals.loai_in ?? 0,
+      chap_xa: vals.chap_xa ? 1 : 0,
+      loai_lan: vals.loai_lan ?? null,
       loai_thung: vals.loai_thung ?? null,
-      chong_tham: editing?.chong_tham ?? 0,
-      boi: editing?.boi ?? 0,
-      be_so_con: editing?.be_so_con ?? 0,
-      can_mang: editing?.can_mang ?? 0,
-      mat: editing?.mat ?? null, mat_dl: editing?.mat_dl ?? null,
-      song_1: editing?.song_1 ?? null, song_1_dl: editing?.song_1_dl ?? null,
-      mat_1: editing?.mat_1 ?? null, mat_1_dl: editing?.mat_1_dl ?? null,
-      song_2: editing?.song_2 ?? null, song_2_dl: editing?.song_2_dl ?? null,
-      mat_2: editing?.mat_2 ?? null, mat_2_dl: editing?.mat_2_dl ?? null,
-      song_3: editing?.song_3 ?? null, song_3_dl: editing?.song_3_dl ?? null,
-      mat_3: editing?.mat_3 ?? null, mat_3_dl: editing?.mat_3_dl ?? null,
+      chong_tham: vals.chong_tham ?? 0,
+      boi: vals.boi ? 1 : 0,
+      be_so_con: vals.be_so_con ?? 0,
+      can_mang: vals.can_mang ?? 0,
+      mat: vals.mat || null,           mat_dl: vals.mat_dl ?? null,
+      song_1: vals.song_1 || null,     song_1_dl: vals.song_1_dl ?? null,
+      mat_1: vals.mat_1 || null,       mat_1_dl: vals.mat_1_dl ?? null,
+      song_2: vals.song_2 || null,     song_2_dl: vals.song_2_dl ?? null,
+      mat_2: vals.mat_2 || null,       mat_2_dl: vals.mat_2_dl ?? null,
+      song_3: vals.song_3 || null,     song_3_dl: vals.song_3_dl ?? null,
+      mat_3: vals.mat_3 || null,       mat_3_dl: vals.mat_3_dl ?? null,
       phan_xuong: vals.phan_xuong || null,
       loai: vals.loai || null,
       ghi_chu: vals.ghi_chu || null,

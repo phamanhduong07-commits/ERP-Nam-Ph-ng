@@ -458,10 +458,9 @@ def duyet_task(
                 f"số lượng giao ({float(task.so_luong_cu):g})",
             )
 
-        # Giảm so_luong về số lượng tính tiền; dòng bù hao bên dưới ghi nhận sl_bh tách biệt
-        # Tổng vật lý: (sl_cu - sl_bh) + sl_bh = sl_cu — vẫn đúng qua 2 dòng
-        it.so_luong = task.so_luong_cu - sl_bh
-        it.thanh_tien = it.so_luong * (it.don_gia or Decimal("0"))
+        # so_luong GIỮ NGUYÊN (physical delivery, kho đọc từ đây)
+        # Chỉ giảm thanh_tien: KH trả tiền (sl_cu - sl_bh) thùng
+        it.thanh_tien = (task.so_luong_cu - sl_bh) * (it.don_gia or Decimal("0"))
         it.tinh_trang_dieu_chinh = task.tinh_trang
         it.huong_xu_ly_dieu_chinh = task.huong_xu_ly
 

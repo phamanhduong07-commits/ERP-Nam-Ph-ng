@@ -126,15 +126,25 @@ export default function SalesInvoiceDetailPage() {
   })
 
   const populateAdjustItems = () => {
-    const items: AdjustItem[] = (deliveryOrder?.items ?? []).map(it => ({
-      production_order_id: it.production_order_id,
-      so_lenh: it.so_lenh,
-      ten_hang: it.ten_hang,
-      dvt: it.dvt,
-      so_luong: it.so_luong,
-      don_gia: it.don_gia,
-      thanh_tien: it.thanh_tien,
-    }))
+    const items: AdjustItem[] = (deliveryOrder?.items ?? [])
+      .filter(it => !(it.tinh_trang_dieu_chinh === 'bu_hao' && it.don_gia === 0))
+      .map(it => {
+        // Bù hao: so_luong vật lý (95) ≠ số lượng tính tiền (90).
+        // Dùng thanh_tien/don_gia để hiển thị SL tính tiền đúng.
+        const so_luong =
+          it.huong_xu_ly_dieu_chinh === 'xuat_bu_hao' && it.don_gia > 0
+            ? Math.round(it.thanh_tien / it.don_gia)
+            : it.so_luong
+        return {
+          production_order_id: it.production_order_id,
+          so_lenh: it.so_lenh,
+          ten_hang: it.ten_hang,
+          dvt: it.dvt,
+          so_luong,
+          don_gia: it.don_gia,
+          thanh_tien: it.thanh_tien,
+        }
+      })
     // fallback nếu không có delivery: 1 dòng trống với tổng hiện tại
     if (!items.length) {
       items.push({

@@ -1763,7 +1763,10 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
               summary={() => (
                 <Table.Summary.Row style={{ fontWeight: 700, background: '#f6ffed' }}>
                   <Table.Summary.Cell index={0} colSpan={3}><Typography.Text strong>Tổng cộng</Typography.Text></Table.Summary.Cell>
-                  <Table.Summary.Cell index={3} align="right">{fmtN(detailOrder.items.reduce((s, it) => s + it.so_luong, 0))}</Table.Summary.Cell>
+                  <Table.Summary.Cell index={3} align="right">{fmtN(detailOrder.items.reduce((s, it) => {
+                    const sl = it.huong_xu_ly_dieu_chinh === 'xuat_bu_hao' && it.don_gia > 0 ? Math.round(it.thanh_tien / it.don_gia) : it.so_luong
+                    return s + sl
+                  }, 0))}</Table.Summary.Cell>
                   <Table.Summary.Cell index={4} align="right">{detailOrder.tong_dien_tich ? detailOrder.tong_dien_tich.toFixed(3) : '—'}</Table.Summary.Cell>
                   <Table.Summary.Cell index={5} align="right">{detailOrder.tong_trong_luong ? detailOrder.tong_trong_luong.toFixed(3) : '—'}</Table.Summary.Cell>
                   {canViewPrice && <Table.Summary.Cell index={6} align="right"><Typography.Text type="danger" strong>{fmtMoney(detailOrder.tong_thanh_toan)}</Typography.Text></Table.Summary.Cell>}
@@ -1773,7 +1776,10 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                 { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 130, render: v => v ? <Typography.Text code>{v}</Typography.Text> : '—' },
                 { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
                 { title: 'ĐVT', dataIndex: 'dvt', width: 60 },
-                { title: 'Số lượng', dataIndex: 'so_luong', width: 90, align: 'right' as const, render: (v: number) => <Typography.Text strong>{fmtN(v)}</Typography.Text> },
+                { title: 'Số lượng', dataIndex: 'so_luong', width: 90, align: 'right' as const, render: (v: number, rec: { huong_xu_ly_dieu_chinh?: string | null; don_gia: number; thanh_tien: number }) => {
+                    const display = rec.huong_xu_ly_dieu_chinh === 'xuat_bu_hao' && rec.don_gia > 0 ? Math.round(rec.thanh_tien / rec.don_gia) : v
+                    return <Typography.Text strong>{fmtN(display)}</Typography.Text>
+                  }},
                 { title: 'M²', dataIndex: 'dien_tich', width: 80, align: 'right' as const, render: (v: number) => v ? v.toFixed(2) : '—' },
                 { title: 'Kg', dataIndex: 'trong_luong', width: 80, align: 'right' as const, render: (v: number) => v ? v.toFixed(2) : '—' },
                 ...(canViewPrice ? [{ title: 'Thành tiền', dataIndex: 'thanh_tien', width: 110, align: 'right' as const, render: (v: number) => v ? <Typography.Text>{fmtMoney(v)}</Typography.Text> : '—' }] : []),

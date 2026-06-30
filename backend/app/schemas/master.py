@@ -126,6 +126,7 @@ class ProductCreate(ProductBase):
 
 
 class ProductUpdate(BaseModel):
+    ma_hang: str | None = None
     ten_hang: str | None = None
     dvt: str | None = None
     dai: Decimal | None = None
@@ -160,6 +161,12 @@ class ProductUpdate(BaseModel):
     song_3_dl: Decimal | None = None
     mat_3: str | None = None
     mat_3_dl: Decimal | None = None
+    phan_xuong: str | None = None
+    loai: str | None = None
+    ma_kh_id: int | None = None
+    ton_toi_thieu: Decimal | None = None
+    ton_toi_da: Decimal | None = None
+    khong_tinh_nxt: bool | None = None
 
 
 class ProductResponse(ProductBase):

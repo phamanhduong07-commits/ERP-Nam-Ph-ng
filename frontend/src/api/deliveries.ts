@@ -112,6 +112,8 @@ export interface DeliveryOrderItem {
   ghi_chu: string | null
   so_luong_da_tra?: number
   so_luong_con_lai?: number
+  tinh_trang_dieu_chinh?: string | null
+  huong_xu_ly_dieu_chinh?: string | null
   // print fields (only present when fetched via GET /deliveries/{id})
   so_don_item?: string | null
   ngay_po?: string | null
