@@ -15,6 +15,7 @@ from app.schemas.production import (
     ProductionOrderListItem,
     PagedResponse
 )
+from app.services.inventory_service import get_workshop_warehouse
 from app.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -478,8 +479,20 @@ class ProductionOrderService:
                     status_code=400,
                     detail="Lệnh đang ở hướng 'Kế hoạch chờ', không thể đặt Tận dụng",
                 )
-        for key, value in data.model_dump(exclude_unset=True).items():
+        payload = data.model_dump(exclude_unset=True)
+        for key, value in payload.items():
             setattr(order, key, value)
+        # Auto-recompute kho_sx_id when phan_xuong_id changes without explicit kho_sx_id
+        if "phan_xuong_id" in payload and "kho_sx_id" not in payload:
+            new_px_id = payload["phan_xuong_id"]
+            if new_px_id:
+                px = self.db.get(PhanXuong, new_px_id)
+                if px:
+                    loai_kho = "GIAY_CUON" if getattr(px, "cong_doan", None) == "cd1_cd2" else "PHOI"
+                    wh = get_workshop_warehouse(self.db, new_px_id, loai_kho)
+                    order.kho_sx_id = wh.id if wh else None
+            else:
+                order.kho_sx_id = None
         self.db.commit()
         self.db.refresh(order)
         logger.info("updated production_order id=%s", order_id)
