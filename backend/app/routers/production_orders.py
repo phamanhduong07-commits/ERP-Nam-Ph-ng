@@ -496,7 +496,7 @@ def tao_lenh_tu_don_hang(
 
     created_orders = []
     for idx, soi in enumerate(so.items):
-        effective_px_id = soi.phan_xuong_id or data.phan_xuong_id or so.phan_xuong_id
+        effective_px_id = data.phan_xuong_id or soi.phan_xuong_id or so.phan_xuong_id
         kho_sx_id = _auto_kho_sx_id(db, effective_px_id, data.kho_sx_id)
         so_lenh = f"{prefix}{(start_seq + idx):03d}"
         order = ProductionOrder(
