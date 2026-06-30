@@ -671,90 +671,53 @@ DT     = kho_tt × dai_tt / 10.000  ← dùng kho_tt!</pre>
     id: 'calc-4',
     category: '📐 Kỹ Thuật Tính Giá',
     title: '5. Hộp Die-cut: Nguyên Lý & 4 Loại Cơ Bản',
-    content: `<p>Hộp die-cut có cấu trúc phức tạp hơn thùng thường và yêu cầu hiểu hình học 3D để nắm công thức. Điểm khác biệt then chốt: <strong>so_dao = 1</strong>, không cắt nhiều mảnh song song.</p>
+    content: `<p>Hộp die-cut cắt một mảnh duy nhất (<strong>so_dao = 1</strong>) — kho_tt = kho_kh, không nhân so_dao. DT = kho_kh × dai_kh / 10.000 m². Tề biên cộng thêm <em>sau khi tính xong</em>: bế tay +1/+1 cm · bế tự động 3L +2/+1.5 cm · bế tự động 5/7L +2/+2 cm.</p>
 
-<h2>Nguyên Lý Die-cut — Khác Gì Slot-type?</h2>
-<table style="width:100%;border-collapse:collapse;margin:10px 0;">
-  <tr style="background:#e6f0ff;">
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">Đặc điểm</th>
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">Slot-type (A1/A3...)</th>
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">Die-cut (Hộp/Khay)</th>
-  </tr>
-  <tr>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">so_dao</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">≥ 1 (tùy kho1)</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>= 1 (luôn luôn)</strong></td>
-  </tr>
-  <tr style="background:#fafafa;">
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">kho_tt</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">kho1 × so_dao + 1.8</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>= kho_kh</strong></td>
-  </tr>
-  <tr>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">DT tính giá</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">kho_kh × dai_kh / 10.000</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>kho_kh × dai_kh / 10.000</strong></td>
-  </tr>
-</table>
-
-<h2>4 Loại Hộp Cơ Bản — Bảng Tra Nhanh</h2>
-<table style="width:100%;border-collapse:collapse;margin:10px 0;">
-  <tr style="background:#e6f0ff;">
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">Loại</th>
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">kho_kh</th>
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">dai_kh</th>
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">Dùng cho</th>
-  </tr>
-  <tr>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>HOP_CAI</strong></td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + 2R + 5</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4C + D + 10</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp tray thông thường</td>
-  </tr>
-  <tr style="background:#fafafa;">
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>HOP_CAI_CHAU</strong></td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + 2R + 10</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4C + D + 10</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp có vách xiên</td>
-  </tr>
-  <tr>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>HOP_GIAY</strong></td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + 2R + 10</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + D + 10</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp tự khép đáy</td>
-  </tr>
-  <tr style="background:#fafafa;">
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>HOP_PIZZA</strong></td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4C + 2R + 5</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2C + D + 5</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hộp nông nắp rộng (pizza, bánh)</td>
-  </tr>
-</table>
-
-<h3>Giải Mã Hệ Số C</h3>
-<ul>
-  <li><strong>3C theo kho_kh:</strong> 3 lần gập chiều Cao theo trục ngang (1 đáy + 2 vách bên).</li>
-  <li><strong>4C theo dai_kh:</strong> 4 lần gập chiều Cao theo trục dọc.</li>
-  <li><strong>HOP_PIZZA đặc biệt:</strong> 4C theo kho (nắp rộng nhiều tầng gập) nhưng chỉ 2C theo dai (hộp rất nông).</li>
-</ul>
-
-<h2>Tề Biên (loai_be) — Cộng Thêm Sau Khi Tính</h2>
-<table style="width:100%;border-collapse:collapse;margin:8px 0;">
-  <tr style="background:#e6f0ff;">
-    <th style="border:1px solid #b0c4de;padding:7px 12px;">Loại bế</th>
-    <th style="border:1px solid #b0c4de;padding:7px 12px;">Cộng kho_kh</th>
-    <th style="border:1px solid #b0c4de;padding:7px 12px;">Cộng dai_kh</th>
-  </tr>
-  <tr><td style="border:1px solid #d0d0d0;padding:6px 12px;">Bế tay</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+1.0 cm</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+1.0 cm</td></tr>
-  <tr style="background:#fafafa;"><td style="border:1px solid #d0d0d0;padding:6px 12px;">Bế tự động 3 lớp</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+2.0 cm</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+1.5 cm</td></tr>
-  <tr><td style="border:1px solid #d0d0d0;padding:6px 12px;">Bế tự động 5/7 lớp</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+2.0 cm</td><td style="border:1px solid #d0d0d0;padding:6px 12px;">+2.0 cm</td></tr>
-</table>
-
+<h2>HOP_CAI — Hộp Tray Thông Thường</h2>
+<p>Hộp 4 vách đứng, không có nắp liền. Phổ biến nhất trong nhóm die-cut — dùng cho rau củ, trái cây, thực phẩm tươi.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 3C + 2R + 5     ← 3×C theo ngang (đáy + 2 vách bên)
+dai_kh = 4C + D + 10     ← 4×C theo dọc (đáy + 2 vách đầu mỗi bên)</pre>
 <div class="doc-alert doc-tip">
-  <strong>Ví dụ HOP_CAI — 30×20×10 cm, 3 lớp, bế tay:</strong><br/>
-  kho_kh = 3×10 + 2×20 + 5 = 75 cm → + 1.0 = 76.0 cm<br/>
-  dai_kh = 4×10 + 30 + 10 = 80 cm → + 1.0 = 81.0 cm<br/>
-  DT = 76.0 × 81.0 / 10.000 = 0.616 m²/cái
+  <strong>Ví dụ HOP_CAI — 30×20×10 cm, bế tay:</strong><br/>
+  kho_kh = 3×10 + 2×20 + 5 = 75 cm → +1.0 = <strong>76.0 cm</strong><br/>
+  dai_kh = 4×10 + 30 + 10 = 80 cm → +1.0 = <strong>81.0 cm</strong><br/>
+  DT = 76.0 × 81.0 / 10.000 = <strong>0.616 m²/cái</strong>
+</div>
+
+<h2>HOP_CAI_CHAU — Hộp Vách Xiên (Chậu)</h2>
+<p>Giống HOP_CAI nhưng 4 vách đổ ra ngoài như hình chậu. Phần +5 cm thêm vào kho_kh để tạo độ xiên của vách — dai_kh không đổi.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 3C + 2R + 10    ← +5 cm hơn HOP_CAI (vách xiên cần thêm giấy)
+dai_kh = 4C + D + 10     ← giống HOP_CAI</pre>
+<p><strong>So sánh nhanh:</strong> Chỉ khác HOP_CAI ở kho_kh (+5 cm). Nếu không chắc loại nào — hỏi xưởng: vách đứng → HOP_CAI, vách xiên ra ngoài → HOP_CAI_CHAU.</p>
+<div class="doc-alert doc-tip">
+  <strong>Ví dụ HOP_CAI_CHAU — 30×20×10 cm, bế tay:</strong><br/>
+  kho_kh = 3×10 + 2×20 + 10 = 80 cm → +1.0 = <strong>81.0 cm</strong><br/>
+  dai_kh = 4×10 + 30 + 10 = 80 cm → +1.0 = <strong>81.0 cm</strong><br/>
+  DT = 81.0 × 81.0 / 10.000 = <strong>0.656 m²/cái</strong>
+</div>
+
+<h2>HOP_GIAY — Hộp Tự Khép Đáy</h2>
+<p>Đáy gập kiểu "lock bottom" — tự khóa khi dựng hộp, không cần keo. Dai_kh ngắn hơn HOP_CAI một C vì phần gập đáy nằm trên trục kho_kh thay vì dai_kh.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 3C + 2R + 10    ← giống HOP_CAI_CHAU
+dai_kh = 3C + D + 10     ← 3C thay vì 4C — tiết kiệm hơn HOP_CAI</pre>
+<p><strong>Điểm nhận biết:</strong> dai_kh dùng 3C (không phải 4C). Nếu kho_kh = dai_kh hoặc kho_kh lớn hơn hẳn → đây là HOP_GIAY.</p>
+<div class="doc-alert doc-tip">
+  <strong>Ví dụ HOP_GIAY — 30×20×10 cm, bế tay:</strong><br/>
+  kho_kh = 3×10 + 2×20 + 10 = 80 cm → +1.0 = <strong>81.0 cm</strong><br/>
+  dai_kh = 3×10 + 30 + 10 = 70 cm → +1.0 = <strong>71.0 cm</strong><br/>
+  DT = 81.0 × 71.0 / 10.000 = <strong>0.575 m²/cái</strong> (ít hơn HOP_CAI 0.041 m²)
+</div>
+
+<h2>HOP_PIZZA — Hộp Nông Nắp Rộng</h2>
+<p>Hộp nông, nắp chiếm phần lớn diện tích (pizza, bánh, hoa quả trưng bày). Đặc trưng: kho rất rộng (4C) nhưng dai ngắn (chỉ 2C) — hộp thấp và dẹt.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 4C + 2R + 5     ← 4×C theo ngang: nắp rộng, nhiều tầng gập
+dai_kh = 2C + D + 5      ← chỉ 2×C theo dọc: hộp nông, ít gập</pre>
+<p><strong>Cách nhớ — tỉ lệ C đảo:</strong> HOP_CAI là 3C/4C; HOP_PIZZA là 4C/2C — hoàn toàn ngược. Kho nhiều C hơn dai → hộp nông nắp rộng.</p>
+<div class="doc-alert doc-tip">
+  <strong>Ví dụ HOP_PIZZA — 40×30×8 cm, bế tay:</strong><br/>
+  kho_kh = 4×8 + 2×30 + 5 = 97 cm → +1.0 = <strong>98.0 cm</strong><br/>
+  dai_kh = 2×8 + 40 + 5 = 61 cm → +1.0 = <strong>62.0 cm</strong><br/>
+  DT = 98.0 × 62.0 / 10.000 = <strong>0.608 m²/cái</strong>
 </div>`
   },
 
