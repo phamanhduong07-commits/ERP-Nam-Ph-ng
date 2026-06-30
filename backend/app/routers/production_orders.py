@@ -494,9 +494,14 @@ def tao_lenh_tu_don_hang(
                         nv_theo_doi_id = quote.nv_theo_doi_id
                         break
 
+    # Default xưởng từ phap_nhan.phoi_phan_xuong_id (ưu tiên hơn SO.phan_xuong_id)
+    effective_phap_nhan_id = data.phap_nhan_id or so.phap_nhan_id
+    phap_nhan = db.get(PhapNhan, effective_phap_nhan_id) if effective_phap_nhan_id else None
+    px_from_pn = phap_nhan.phoi_phan_xuong_id if phap_nhan else None
+
     created_orders = []
     for idx, soi in enumerate(so.items):
-        effective_px_id = data.phan_xuong_id or soi.phan_xuong_id or so.phan_xuong_id
+        effective_px_id = data.phan_xuong_id or soi.phan_xuong_id or px_from_pn or so.phan_xuong_id
         kho_sx_id = _auto_kho_sx_id(db, effective_px_id, data.kho_sx_id)
         so_lenh = f"{prefix}{(start_seq + idx):03d}"
         order = ProductionOrder(
