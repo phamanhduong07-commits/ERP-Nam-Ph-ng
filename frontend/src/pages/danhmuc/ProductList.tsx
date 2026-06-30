@@ -10,7 +10,7 @@ import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { productsApi as productsFullApi, type ProductFull, type ProductFullCreate } from '../../api/products'
 import { customersApi } from '../../api/customers'
-import { LOAI_THUNG_OPTIONS } from '../../api/quotes'
+import { LOAI_THUNG_OPTIONS, LOAI_BE_OPTIONS, TO_HOP_SONG_OPTIONS } from '../../api/quotes'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
@@ -52,6 +52,13 @@ const PAPER_LAYERS = [
   { label: 'Sóng 3',    code: 'song_3', dl: 'song_3_dl' },
   { label: 'Mặt trong', code: 'mat_3',  dl: 'mat_3_dl' },
 ] as const
+
+const MAY_IN_OPTIONS = [
+  { value: '4 màu', label: '4 màu' },
+  { value: '5 màu', label: '5 màu' },
+  { value: '6 màu', label: '6 màu' },
+  { value: 'in dọc', label: 'In dọc' },
+]
 
 const LOAI_THUNG_GROUPED = [
   { label: 'Thùng', options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Thùng') },
@@ -128,6 +135,11 @@ export default function ProductList() {
       be_so_con: 0,
       can_mang: 0,
       khong_tinh_nxt: false,
+      be_hai_manh: false, co_be: false, be_lo: false, do_kho: false, do_phu: false,
+      co_tem_offset: false,
+      tem_sp_per_to: 1, tem_waste_to: 0, tem_so_mau: 0,
+      tem_co_can_mang: false, tem_co_khuon_be: false, tem_co_uv: false,
+      tem_co_suppo: false, tem_co_luoi: false, tem_hai_manh: false, tem_khac_thiet_ke: false,
     })
     setModalOpen(true)
   }
@@ -182,6 +194,34 @@ export default function ProductList() {
       loai: vals.loai || null,
       ghi_chu: vals.ghi_chu || null,
       trang_thai: vals.trang_thai ?? true,
+      ton_toi_thieu: vals.ton_toi_thieu ?? null,
+      ton_toi_da: vals.ton_toi_da ?? null,
+      khong_tinh_nxt: vals.khong_tinh_nxt ?? false,
+      to_hop_song: vals.to_hop_song ?? null,
+      loai_be: vals.loai_be ?? null,
+      be_hai_manh: vals.be_hai_manh ?? false,
+      co_be: vals.co_be ?? false,
+      be_lo: vals.be_lo ?? false,
+      do_kho: vals.do_kho ?? false,
+      do_phu: vals.do_phu ?? false,
+      may_in: vals.may_in ?? null,
+      ban_ve_kt: vals.ban_ve_kt ?? null,
+      nhom_san_pham: vals.nhom_san_pham ?? null,
+      co_tem_offset: vals.co_tem_offset ?? false,
+      tem_loai_giay: vals.tem_loai_giay ?? null,
+      tem_gsm: vals.tem_gsm ?? null,
+      tem_dai_to: vals.tem_dai_to ?? null,
+      tem_rong_to: vals.tem_rong_to ?? null,
+      tem_sp_per_to: vals.tem_sp_per_to ?? 1,
+      tem_waste_to: vals.tem_waste_to ?? 0,
+      tem_so_mau: vals.tem_so_mau ?? 0,
+      tem_co_can_mang: vals.tem_co_can_mang ?? false,
+      tem_co_khuon_be: vals.tem_co_khuon_be ?? false,
+      tem_co_uv: vals.tem_co_uv ?? false,
+      tem_co_suppo: vals.tem_co_suppo ?? false,
+      tem_co_luoi: vals.tem_co_luoi ?? false,
+      tem_hai_manh: vals.tem_hai_manh ?? false,
+      tem_khac_thiet_ke: vals.tem_khac_thiet_ke ?? false,
     }
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
     else createMut.mutate(payload)
@@ -309,136 +349,345 @@ export default function ProductList() {
         onCancel={closeModal}
         onOk={handleSave}
         confirmLoading={createMut.isPending || updateMut.isPending}
-        width={680}
+        width={900}
         okText="Lưu"
         cancelText="Huỷ"
         destroyOnClose
       >
         <Form form={form} layout="vertical" size="small">
-          <Row gutter={12}>
-            <Col span={8}>
-              <Form.Item label="Mã AMIS" name="ma_amis" rules={[{ required: true, message: 'Nhập mã AMIS' }]}>
-                <Input disabled={!!editing} placeholder="VD: SP001" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="Mã hàng" name="ma_hang">
-                <Input placeholder="Mã hàng nội bộ" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="DVT" name="dvt">
-                <Input placeholder="Cái" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Tabs size="small" items={[
+            {
+              key: '1',
+              label: 'Cơ bản',
+              children: (
+                <>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Mã AMIS" name="ma_amis" rules={[{ required: true, message: 'Nhập mã AMIS' }]}>
+                        <Input disabled={!!editing} placeholder="VD: SP001" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Mã hàng" name="ma_hang">
+                        <Input placeholder="Mã hàng nội bộ" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="DVT" name="dvt">
+                        <Input placeholder="Cái" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          <Form.Item label="Tên hàng" name="ten_hang" rules={[{ required: true, message: 'Nhập tên hàng' }]}>
-            <Input placeholder="Tên sản phẩm" />
-          </Form.Item>
+                  <Form.Item label="Tên hàng" name="ten_hang" rules={[{ required: true, message: 'Nhập tên hàng' }]}>
+                    <Input placeholder="Tên sản phẩm" />
+                  </Form.Item>
 
-          <Form.Item label="Khách hàng" name="ma_kh_id">
-            <Select
-              showSearch
-              allowClear
-              placeholder="Chọn khách hàng"
-              options={khOptions}
-              filterOption={(input, opt) =>
-                (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-            />
-          </Form.Item>
+                  <Form.Item label="Khách hàng" name="ma_kh_id">
+                    <Select
+                      showSearch
+                      allowClear
+                      placeholder="Chọn khách hàng"
+                      options={khOptions}
+                      filterOption={(input, opt) =>
+                        (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                    />
+                  </Form.Item>
 
-          <Row gutter={12}>
-            <Col span={8}>
-              <Form.Item label="Dài (cm)" name="dai">
-                <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="Rộng (cm)" name="rong">
-                <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="Cao (cm)" name="cao">
-                <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
-              </Form.Item>
-            </Col>
-          </Row>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Dài (cm)" name="dai">
+                        <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Rộng (cm)" name="rong">
+                        <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Cao (cm)" name="cao">
+                        <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          <Form.Item label="Loại thùng" name="loai_thung">
-            <Select
-              allowClear
-              placeholder="Chọn loại thùng..."
-              options={LOAI_THUNG_GROUPED}
-            />
-          </Form.Item>
+                  <Form.Item label="Loại thùng" name="loai_thung">
+                    <Select allowClear placeholder="Chọn loại thùng..." options={LOAI_THUNG_GROUPED} />
+                  </Form.Item>
 
-          <Row gutter={12}>
-            <Col span={8}>
-              <Form.Item label="Số lớp" name="so_lop">
-                <Select
-                  options={SO_LOP_OPTIONS.map(n => ({ value: n, label: `${n} lớp` }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="Số màu" name="so_mau">
-                <InputNumber style={{ width: '100%' }} min={0} max={10} placeholder="0" />
-              </Form.Item>
-            </Col>
-            {canViewPrice && (
-              <Col span={8}>
-                <Form.Item label="Giá bán (VND)" name="gia_ban">
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    min={0}
-                    step={1000}
-                    formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    placeholder="0"
-                  />
-                </Form.Item>
-              </Col>
-            )}
-          </Row>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Số lớp" name="so_lop">
+                        <Select options={SO_LOP_OPTIONS.map(n => ({ value: n, label: `${n} lớp` }))} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Số màu" name="so_mau">
+                        <InputNumber style={{ width: '100%' }} min={0} max={10} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                    {canViewPrice && (
+                      <Col span={8}>
+                        <Form.Item label="Giá bán (VND)" name="gia_ban">
+                          <InputNumber
+                            style={{ width: '100%' }}
+                            min={0}
+                            step={1000}
+                            formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                            placeholder="0"
+                          />
+                        </Form.Item>
+                      </Col>
+                    )}
+                  </Row>
 
-          <Row gutter={12}>
-            <Col span={6}>
-              <Form.Item label="Ghim" name="ghim" valuePropName="checked">
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item label="Dán" name="dan" valuePropName="checked">
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Phân xưởng" name="phan_xuong">
-                <Input placeholder="Phân xưởng sản xuất" />
-              </Form.Item>
-            </Col>
-          </Row>
+                  <Row gutter={12}>
+                    <Col span={4}>
+                      <Form.Item label="Ghim" name="ghim" valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                    <Col span={4}>
+                      <Form.Item label="Dán" name="dan" valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                    <Col span={16}>
+                      <Form.Item label="Phân xưởng" name="phan_xuong">
+                        <Input placeholder="Phân xưởng sản xuất" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label="Loại" name="loai">
-                <Input placeholder="Loại sản phẩm" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Ghi chú" name="ghi_chu">
-                <Input placeholder="Ghi chú thêm" />
-              </Form.Item>
-            </Col>
-          </Row>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Loại" name="loai">
+                        <Input placeholder="Loại sản phẩm" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Nhóm sản phẩm" name="nhom_san_pham">
+                        <Input placeholder="Nhóm SP" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Ghi chú" name="ghi_chu">
+                        <Input placeholder="Ghi chú thêm" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          {editing && (
-            <Form.Item label="Trạng thái" name="trang_thai" valuePropName="checked">
-              <Switch checkedChildren="Hoạt động" unCheckedChildren="Ngừng" />
-            </Form.Item>
-          )}
+                  <Form.Item label="Bản vẽ kỹ thuật" name="ban_ve_kt">
+                    <Input placeholder="Link hoặc mã bản vẽ" />
+                  </Form.Item>
+
+                  {editing && (
+                    <Form.Item label="Trạng thái" name="trang_thai" valuePropName="checked">
+                      <Switch checkedChildren="Hoạt động" unCheckedChildren="Ngừng" />
+                    </Form.Item>
+                  )}
+                </>
+              ),
+            },
+            {
+              key: '2',
+              label: 'Gia công',
+              children: (
+                <>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item label="Loại in" name="loai_in">
+                        <Select options={LOAI_IN_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="Loại lằn" name="loai_lan">
+                        <Select allowClear placeholder="Không" options={LOAI_LAN_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item label="Chống thấm" name="chong_tham">
+                        <Select options={CHONG_THAM_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="Cán màng" name="can_mang">
+                        <Select options={CAN_MANG_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Bế số con" name="be_so_con">
+                        <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Chấp xả" name="chap_xa" valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Bồi" name="boi" valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item label="Loại bế" name="loai_be">
+                        <Select allowClear placeholder="Không bế" options={LOAI_BE_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="Máy in" name="may_in">
+                        <Select allowClear placeholder="Chọn máy in" options={MAY_IN_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+
+                  <Row gutter={12}>
+                    <Col span={4}><Form.Item label="Bế 2 mảnh" name="be_hai_manh" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Có bế" name="co_be" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Bế lỗ" name="be_lo" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Độ khô" name="do_kho" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Độ phủ" name="do_phu" valuePropName="checked"><Switch /></Form.Item></Col>
+                  </Row>
+                </>
+              ),
+            },
+            {
+              key: '3',
+              label: 'Cấu trúc giấy',
+              children: (
+                <>
+                  <Form.Item label="Tổ hợp sóng" name="to_hop_song" style={{ marginBottom: 12 }}>
+                    <Select
+                      allowClear
+                      placeholder="Chọn tổ hợp sóng"
+                      options={
+                        (TO_HOP_SONG_OPTIONS[form.getFieldValue('so_lop') ?? 3] ?? [])
+                          .map((v: string) => ({ value: v, label: v }))
+                      }
+                    />
+                  </Form.Item>
+                  <Row style={{ marginBottom: 4, color: '#999', fontSize: 11 }}>
+                    <Col style={{ width: 80 }}>Lớp</Col>
+                    <Col flex={1} style={{ paddingLeft: 8 }}>Mã giấy</Col>
+                    <Col style={{ width: 140, paddingLeft: 8 }}>Định lượng (g/m²)</Col>
+                  </Row>
+                  {PAPER_LAYERS.map(layer => (
+                    <Row key={layer.code} gutter={8} align="middle" style={{ marginBottom: 8 }}>
+                      <Col style={{ width: 80, flexShrink: 0 }}>
+                        <span style={{ fontSize: 12, color: '#555' }}>{layer.label}</span>
+                      </Col>
+                      <Col flex={1}>
+                        <Form.Item name={layer.code} noStyle>
+                          <Input placeholder="Mã giấy" />
+                        </Form.Item>
+                      </Col>
+                      <Col style={{ width: 140 }}>
+                        <Form.Item name={layer.dl} noStyle>
+                          <InputNumber min={0} style={{ width: '100%' }} placeholder="0" addonAfter="g/m²" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  ))}
+                </>
+              ),
+            },
+            {
+              key: '4',
+              label: 'Kho',
+              children: (
+                <Row gutter={12}>
+                  <Col span={8}>
+                    <Form.Item label="Tồn tối thiểu" name="ton_toi_thieu">
+                      <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item label="Tồn tối đa" name="ton_toi_da">
+                      <InputNumber style={{ width: '100%' }} min={0} placeholder="—" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item label="Không tính NXT" name="khong_tinh_nxt" valuePropName="checked">
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              ),
+            },
+            {
+              key: '5',
+              label: 'Tem Offset',
+              children: (
+                <>
+                  <Form.Item label="Có tem offset" name="co_tem_offset" valuePropName="checked">
+                    <Switch />
+                  </Form.Item>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Loại giấy tem" name="tem_loai_giay">
+                        <Input placeholder="VD: C2S, Couche" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Định lượng tem (g/m²)" name="tem_gsm">
+                        <InputNumber style={{ width: '100%' }} min={0} step={0.5} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Dài tờ (mm)" name="tem_dai_to">
+                        <InputNumber style={{ width: '100%' }} min={0} step={1} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Rộng tờ (mm)" name="tem_rong_to">
+                        <InputNumber style={{ width: '100%' }} min={0} step={1} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="SP/tờ" name="tem_sp_per_to">
+                        <InputNumber style={{ width: '100%' }} min={1} placeholder="1" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Tờ hao (waste)" name="tem_waste_to">
+                        <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Số màu" name="tem_so_mau">
+                        <InputNumber style={{ width: '100%' }} min={0} max={10} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={12} style={{ marginTop: 8 }}>
+                    <Col span={4}><Form.Item label="Cán màng" name="tem_co_can_mang" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Khuôn bế" name="tem_co_khuon_be" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="UV" name="tem_co_uv" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Suppo" name="tem_co_suppo" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Lưới" name="tem_co_luoi" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Hai mảnh" name="tem_hai_manh" valuePropName="checked"><Switch /></Form.Item></Col>
+                  </Row>
+                  <Row gutter={12}>
+                    <Col span={4}><Form.Item label="Khắc thiết kế" name="tem_khac_thiet_ke" valuePropName="checked"><Switch /></Form.Item></Col>
+                  </Row>
+                </>
+              ),
+            },
+          ]} />
         </Form>
       </Modal>
 

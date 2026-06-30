@@ -21,6 +21,7 @@ from app.schemas.production_plan import (
     PushToQueueRequest, QueueLineResponse,
 )
 from app.services.price_calculator import calculate_dien_tich
+from app.utils.production_queue import QUEUE_POOL_SO, get_or_create_pool_plan as _get_or_create_pool_plan
 
 router = APIRouter(
     prefix="/api/production-plans",
@@ -42,23 +43,6 @@ def _generate_so_ke_hoach(db: Session) -> str:
     )
     seq = (int(last.so_ke_hoach[-3:]) + 1) if last else 1
     return f"{prefix}{seq:03d}"
-
-
-QUEUE_POOL_SO = "KHSX-POOL"
-
-
-def _get_or_create_pool_plan(db: Session) -> "ProductionPlan":
-    plan = db.query(ProductionPlan).filter(ProductionPlan.so_ke_hoach == QUEUE_POOL_SO).first()
-    if not plan:
-        plan = ProductionPlan(
-            so_ke_hoach=QUEUE_POOL_SO,
-            ngay_ke_hoach=date.today(),
-            ghi_chu="Hàng chờ — LSX gỡ khỏi kế hoạch",
-            trang_thai="nhap",
-        )
-        db.add(plan)
-        db.flush()
-    return plan
 
 
 def _calc_kho_tt(kho1: Decimal | None, so_dao: int | None) -> Decimal | None:
@@ -564,7 +548,7 @@ def get_queue(
             .joinedload(ProductionOrder.sales_order)
             .joinedload(SalesOrder.customer),
         )
-        .filter(ProductionPlan.trang_thai.in_(["nhap", "da_xuat"]))
+        .filter(ProductionPlan.trang_thai == "nhap")
         .all()
     )
 

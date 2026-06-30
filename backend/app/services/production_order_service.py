@@ -17,6 +17,7 @@ from app.schemas.production import (
 )
 from app.services.inventory_service import get_workshop_warehouse
 from app.utils.log import get_logger
+from app.utils.production_queue import get_or_create_pool_plan
 
 logger = get_logger(__name__)
 
@@ -410,6 +411,7 @@ class ProductionOrderService:
         order = ProductionOrder(**order_data)
         self.db.add(order)
 
+        created_items: list[ProductionOrderItem] = []
         for item_data in data.items:
             product = None
             if item_data.product_id:
@@ -425,6 +427,7 @@ class ProductionOrderService:
                 ghi_chu=item_data.ghi_chu,
             )
             self.db.add(item)
+            created_items.append(item)
 
         # Auto-populate don_gia_noi_bo from QuoteItem based on warehouse type:
         # kho PHOI → gia_phoi (a+b+e), kho TP → gia_noi_bo (a+b+c+d+e)
@@ -446,6 +449,18 @@ class ProductionOrderService:
             so = self.db.query(SalesOrder).filter(SalesOrder.id == data.sales_order_id).first()
             if so and so.trang_thai == "da_duyet":
                 so.trang_thai = "dang_sx"
+
+        # Auto-push items vào KHSX-POOL (hàng chờ sản xuất)
+        self.db.flush()  # gán ID cho order + items trước khi tạo plan lines
+        pool = get_or_create_pool_plan(self.db)
+        for item in created_items:
+            self.db.add(ProductionPlanLine(
+                plan_id=pool.id,
+                production_order_item_id=item.id,
+                trang_thai="cho",
+                so_luong_ke_hoach=item.so_luong_ke_hoach,
+                thu_tu=0,
+            ))
 
         self.db.commit()
         self.db.refresh(order)

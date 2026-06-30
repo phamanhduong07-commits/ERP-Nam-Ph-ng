@@ -118,6 +118,33 @@ class ProductBase(BaseModel):
     loai: str | None = None
     ma_kh_id: int | None = None
     gia_ban: Decimal = Decimal("0")
+    # Đặc tính sản xuất
+    to_hop_song: str | None = None
+    loai_be: str | None = None
+    be_hai_manh: bool = False
+    co_be: bool = False
+    be_lo: bool = False
+    do_kho: bool = False
+    do_phu: bool = False
+    may_in: str | None = None
+    ban_ve_kt: str | None = None
+    nhom_san_pham: str | None = None
+    # Tem offset
+    co_tem_offset: bool = False
+    tem_loai_giay: str | None = None
+    tem_gsm: Decimal | None = None
+    tem_dai_to: Decimal | None = None
+    tem_rong_to: Decimal | None = None
+    tem_sp_per_to: int = 1
+    tem_waste_to: int = 0
+    tem_so_mau: int = 0
+    tem_co_can_mang: bool = False
+    tem_co_khuon_be: bool = False
+    tem_co_uv: bool = False
+    tem_co_suppo: bool = False
+    tem_co_luoi: bool = False
+    tem_hai_manh: bool = False
+    tem_khac_thiet_ke: bool = False
     ghi_chu: str | None = None
 
 
@@ -167,6 +194,31 @@ class ProductUpdate(BaseModel):
     ton_toi_thieu: Decimal | None = None
     ton_toi_da: Decimal | None = None
     khong_tinh_nxt: bool | None = None
+    to_hop_song: str | None = None
+    loai_be: str | None = None
+    be_hai_manh: bool | None = None
+    co_be: bool | None = None
+    be_lo: bool | None = None
+    do_kho: bool | None = None
+    do_phu: bool | None = None
+    may_in: str | None = None
+    ban_ve_kt: str | None = None
+    nhom_san_pham: str | None = None
+    co_tem_offset: bool | None = None
+    tem_loai_giay: str | None = None
+    tem_gsm: Decimal | None = None
+    tem_dai_to: Decimal | None = None
+    tem_rong_to: Decimal | None = None
+    tem_sp_per_to: int | None = None
+    tem_waste_to: int | None = None
+    tem_so_mau: int | None = None
+    tem_co_can_mang: bool | None = None
+    tem_co_khuon_be: bool | None = None
+    tem_co_uv: bool | None = None
+    tem_co_suppo: bool | None = None
+    tem_co_luoi: bool | None = None
+    tem_hai_manh: bool | None = None
+    tem_khac_thiet_ke: bool | None = None
 
 
 class ProductResponse(ProductBase):
@@ -174,6 +226,9 @@ class ProductResponse(ProductBase):
     trang_thai: bool
     created_at: datetime
     ten_khach_hang: str | None = None
+    ton_toi_thieu: Decimal | None = None
+    ton_toi_da: Decimal | None = None
+    khong_tinh_nxt: bool = False
 
     class Config:
         from_attributes = True

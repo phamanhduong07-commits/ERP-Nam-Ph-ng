@@ -51,6 +51,33 @@ export interface ProductFull extends Product {
   ton_toi_thieu: number | null
   ton_toi_da: number | null
   khong_tinh_nxt: boolean
+  // Đặc tính sản xuất
+  to_hop_song: string | null
+  loai_be: string | null
+  be_hai_manh: boolean
+  co_be: boolean
+  be_lo: boolean
+  do_kho: boolean
+  do_phu: boolean
+  may_in: string | null
+  ban_ve_kt: string | null
+  nhom_san_pham: string | null
+  // Tem offset
+  co_tem_offset: boolean
+  tem_loai_giay: string | null
+  tem_gsm: number | null
+  tem_dai_to: number | null
+  tem_rong_to: number | null
+  tem_sp_per_to: number
+  tem_waste_to: number
+  tem_so_mau: number
+  tem_co_can_mang: boolean
+  tem_co_khuon_be: boolean
+  tem_co_uv: boolean
+  tem_co_suppo: boolean
+  tem_co_luoi: boolean
+  tem_hai_manh: boolean
+  tem_khac_thiet_ke: boolean
   ten_khach_hang?: string
   created_at: string
 }

@@ -374,6 +374,33 @@ class Product(Base):
     ton_toi_thieu: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
     ton_toi_da: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Đặc tính sản xuất (đồng bộ với DTBaoGia)
+    to_hop_song: Mapped[str | None] = mapped_column(String(10))         # A, B, C, E, AB, BC...
+    loai_be: Mapped[str | None] = mapped_column(String(30))             # be_tay, be_tu_dong_3/5/7
+    be_hai_manh: Mapped[bool] = mapped_column(Boolean, default=False)   # bế 2 mảnh
+    co_be: Mapped[bool] = mapped_column(Boolean, default=False)         # có bế khuôn
+    be_lo: Mapped[bool] = mapped_column(Boolean, default=False)         # bế lỗ
+    do_kho: Mapped[bool] = mapped_column(Boolean, default=False)        # hàng khó
+    do_phu: Mapped[bool] = mapped_column(Boolean, default=False)        # độ phủ in
+    may_in: Mapped[str | None] = mapped_column(String(20))              # 4 màu, 5 màu, 6 màu, in dọc
+    ban_ve_kt: Mapped[str | None] = mapped_column(String(200))          # bản vẽ kỹ thuật
+    nhom_san_pham: Mapped[str | None] = mapped_column(String(50))       # nhóm sản phẩm
+    # Tem offset
+    co_tem_offset: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_loai_giay: Mapped[str | None] = mapped_column(String(30))
+    tem_gsm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    tem_dai_to: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    tem_rong_to: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    tem_sp_per_to: Mapped[int] = mapped_column(Integer, default=1)
+    tem_waste_to: Mapped[int] = mapped_column(Integer, default=0)
+    tem_so_mau: Mapped[int] = mapped_column(Integer, default=0)
+    tem_co_can_mang: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_co_khuon_be: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_co_uv: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_co_suppo: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_co_luoi: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_hai_manh: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_khac_thiet_ke: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     sx_params_mac_dinh: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
