@@ -239,6 +239,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['production-order', id] })
     qc.invalidateQueries({ queryKey: ['production-orders'] })
+    qc.invalidateQueries({ queryKey: ['may-song-list'] })
   }
 
   const { data: phapNhanList = [] } = useQuery({
