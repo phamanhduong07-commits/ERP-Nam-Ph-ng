@@ -65,6 +65,42 @@ from app.utils.log import get_logger
 
 logger = get_logger(__name__)
 
+_LOAI_IN_MAP = {0: "khong_in", 1: "flexo", 2: "ky_thuat_so"}
+
+_SPEC_FIELDS = {
+    "loai_thung", "dai", "rong", "cao", "so_lop", "to_hop_song",
+    "mat", "mat_dl", "song_1", "song_1_dl", "mat_1", "mat_1_dl",
+    "song_2", "song_2_dl", "mat_2", "mat_2_dl", "song_3", "song_3_dl",
+    "mat_3", "mat_3_dl", "loai_in", "so_mau", "loai_lan",
+    "c_tham", "can_man", "kho_tt", "dai_tt", "dien_tich",
+}
+
+
+def _spec_from_product(p: Product) -> dict:
+    """Copy technical spec fields from Product to SalesOrderItem (defaults)."""
+    return dict(
+        loai_thung=p.loai_thung,
+        dai=p.dai, rong=p.rong, cao=p.cao,
+        so_lop=p.so_lop,
+        to_hop_song=p.to_hop_song,
+        mat=p.mat, mat_dl=p.mat_dl,
+        song_1=p.song_1, song_1_dl=p.song_1_dl,
+        mat_1=p.mat_1, mat_1_dl=p.mat_1_dl,
+        song_2=p.song_2, song_2_dl=p.song_2_dl,
+        mat_2=p.mat_2, mat_2_dl=p.mat_2_dl,
+        song_3=p.song_3, song_3_dl=p.song_3_dl,
+        mat_3=p.mat_3, mat_3_dl=p.mat_3_dl,
+        loai_in=_LOAI_IN_MAP.get(p.loai_in, "khong_in"),
+        so_mau=p.so_mau,
+        loai_lan=p.loai_lan,
+    )
+
+
+def _spec_from_payload(item_data) -> dict:
+    """Extract explicit spec fields from payload (override Product defaults)."""
+    return {k: v for k, v in item_data.model_dump().items() if k in _SPEC_FIELDS and v is not None}
+
+
 SALES_ORDER_IMPORT_FIELDS = [
     ImportField("so_don", "So don hang", required=True, help_text="VD: DH2405-001"),
     ImportField("ngay_don", "Ngay don", required=True, help_text="DD/MM/YYYY"),
@@ -169,9 +205,15 @@ def create_order(
         ghi_chu=data.ghi_chu,
         ty_le_giam_gia=data.ty_le_giam_gia,
         so_tien_giam_gia=data.so_tien_giam_gia,
+        chi_phi_bang_in=data.chi_phi_bang_in,
+        chi_phi_khuon=data.chi_phi_khuon,
+        chi_phi_van_chuyen=data.chi_phi_van_chuyen,
+        ty_le_vat=data.ty_le_vat,
+        dieu_khoan=data.dieu_khoan,
         trang_thai="moi",
         created_by=current_user.id,
         nv_kinh_doanh_id=data.nv_kinh_doanh_id or current_user.id,
+        nv_theo_doi_id=data.nv_theo_doi_id,
     )
 
     tong_tien = 0
@@ -187,6 +229,7 @@ def create_order(
             ten_hang = item_data.ten_hang or "Dịch vụ"
             dvt = item_data.dvt or "lần"
 
+        spec = {**(_spec_from_product(product) if product else {}), **_spec_from_payload(item_data)}
         item = SalesOrderItem(
             product_id=item_data.product_id,
             ten_hang=ten_hang,
@@ -199,6 +242,7 @@ def create_order(
             ghi_chu_san_pham=item_data.ghi_chu_san_pham,
             yeu_cau_in=item_data.yeu_cau_in,
             phan_xuong_id=item_data.phan_xuong_id,
+            **spec,
         )
         order.items.append(item)
         tong_tien += float(item.thanh_tien)
@@ -212,6 +256,7 @@ def create_order(
         order.tong_tien_sau_giam = max(0, order.tong_tien - order.so_tien_giam_gia)
     else:
         order.tong_tien_sau_giam = order.tong_tien
+    order.tien_vat = round(float(order.tong_tien_sau_giam) * float(order.ty_le_vat) / 100, 2)
     db.add(order)
     db.commit()
     db.refresh(order)
@@ -264,6 +309,9 @@ def update_order(
                 db_item.phan_xuong_id = item_data.phan_xuong_id
                 if item_data.ten_hang:
                     db_item.ten_hang = item_data.ten_hang
+                # Update spec fields nếu có trong payload
+                for field, value in _spec_from_payload(item_data).items():
+                    setattr(db_item, field, value)
             else:
                 # Insert item mới
                 if item_data.product_id is not None:
@@ -275,6 +323,7 @@ def update_order(
                 else:
                     ten_hang = item_data.ten_hang or "Dịch vụ"
                     dvt = item_data.dvt or "lần"
+                spec = {**(_spec_from_product(product) if product else {}), **_spec_from_payload(item_data)}
                 new_item = SalesOrderItem(
                     product_id=item_data.product_id,
                     ten_hang=ten_hang,
@@ -287,6 +336,7 @@ def update_order(
                     ghi_chu_san_pham=item_data.ghi_chu_san_pham,
                     yeu_cau_in=item_data.yeu_cau_in,
                     phan_xuong_id=item_data.phan_xuong_id,
+                    **spec,
                 )
                 order.items.append(new_item)
 
@@ -301,6 +351,8 @@ def update_order(
         else:
             order.tong_tien_sau_giam = order.tong_tien
 
+    # Tính lại tien_vat theo ty_le_vat hiện tại
+    order.tien_vat = round(float(order.tong_tien_sau_giam) * float(order.ty_le_vat or 0) / 100, 2)
     db.commit()
     logger.info("updated sales_order id=%s", order_id)
     return get_order(order_id, db, current_user)

@@ -1229,12 +1229,19 @@ def tao_don_hang_tu_bao_gia(
         phap_nhan_sx_id=quote.phap_nhan_sx_id,
         phan_xuong_id=quote.phan_xuong_id,
         nv_kinh_doanh_id=quote.nv_phu_trach_id,
+        nv_theo_doi_id=quote.nv_theo_doi_id,
         trang_thai="moi",
         ngay_giao_hang=body.ngay_giao_hang,
         dia_chi_giao=body.dia_chi_giao or None,
         dien_thoai_giao=body.dien_thoai_giao or None,
         ghi_chu=f"Lập từ báo giá {quote.so_bao_gia}",
         created_by=current_user.id,
+        chi_phi_bang_in=quote.chi_phi_bang_in or 0,
+        chi_phi_khuon=quote.chi_phi_khuon or 0,
+        chi_phi_van_chuyen=quote.chi_phi_van_chuyen or 0,
+        ty_le_vat=quote.ty_le_vat or 8,
+        tien_vat=quote.tien_vat or 0,
+        dieu_khoan=quote.dieu_khoan,
     )
 
     try:

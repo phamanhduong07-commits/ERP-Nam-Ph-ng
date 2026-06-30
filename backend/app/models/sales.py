@@ -18,6 +18,7 @@ class SalesOrder(Base):
     ngay_don: Mapped[date] = mapped_column(Date, nullable=False)
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     nv_kinh_doanh_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     trang_thai: Mapped[str] = mapped_column(String(30), default="moi")
     ngay_giao_hang: Mapped[date | None] = mapped_column(Date)
     dia_chi_giao: Mapped[str | None] = mapped_column(Text)
@@ -27,6 +28,12 @@ class SalesOrder(Base):
     ty_le_giam_gia: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)  # % giảm giá
     so_tien_giam_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # Số tiền giảm giá
     tong_tien_sau_giam: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # Tổng sau giảm giá
+    chi_phi_bang_in: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    chi_phi_khuon: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    chi_phi_van_chuyen: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ty_le_vat: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=8)
+    tien_vat: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    dieu_khoan: Mapped[str | None] = mapped_column(Text)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     phap_nhan_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
@@ -47,6 +54,7 @@ class SalesOrder(Base):
         cascade="all, delete-orphan"
     )
     nv_kinh_doanh: Mapped["User | None"] = relationship("User", foreign_keys=[nv_kinh_doanh_id])
+    nv_theo_doi: Mapped["User | None"] = relationship("User", foreign_keys=[nv_theo_doi_id])
     creator: Mapped["User | None"] = relationship("User", foreign_keys=[created_by])
     approver: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by])
     phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])

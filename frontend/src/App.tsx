@@ -18,6 +18,7 @@ const GiaoHangMobilePage = lazy(() => import('./pages/warehouse/GiaoHangMobilePa
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const OrderCreate = lazy(() => import('./pages/sales/OrderCreate'))
 const OrderDetail = lazy(() => import('./pages/sales/OrderDetail'))
+const OrderEdit = lazy(() => import('./pages/sales/OrderEdit'))
 const OrderDiscountUpdate = lazy(() => import('./pages/sales/OrderDiscountUpdate'))
 const SalesOrdersPage = lazy(() => import('./pages/sales/SalesOrdersPage'))
 const SalesReturnsPage = lazy(() => import('./pages/sales/SalesReturnsPage'))
@@ -352,6 +353,7 @@ export default function App() {
             <Route path="sales/orders" element={<ErrorBoundary><SalesOrdersPage /></ErrorBoundary>} />
             <Route path="sales/orders/new" element={<ErrorBoundary><OrderCreate /></ErrorBoundary>} />
             <Route path="sales/orders/:id" element={<ErrorBoundary><OrderDetail /></ErrorBoundary>} />
+            <Route path="sales/orders/:id/edit" element={<ErrorBoundary><OrderEdit /></ErrorBoundary>} />
             <Route path="sales/orders/:id/discount" element={<ErrorBoundary><OrderDiscountUpdate /></ErrorBoundary>} />
             <Route path="sales/returns" element={<ErrorBoundary><SalesReturnsPage /></ErrorBoundary>} />
             <Route path="sales/returns/create" element={<ErrorBoundary><SalesReturnCreate /></ErrorBoundary>} />

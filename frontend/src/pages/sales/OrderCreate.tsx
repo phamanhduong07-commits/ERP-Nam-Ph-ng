@@ -15,7 +15,6 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
-import { usersApi } from '../../api/usersApi'
 import { taiSanInApi } from '../../api/taiSanIn'
 import type { Product } from '../../api/products'
 import EmptyState from "../../components/EmptyState"
@@ -98,8 +97,8 @@ export default function OrderCreate() {
   const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
 
   const { data: nhanVienRaw } = useQuery({
-    queryKey: ['nhan-vien-list'],
-    queryFn: () => usersApi.dropdown().then(r => r.data),
+    queryKey: ['sale-users'],
+    queryFn: () => customersApi.saleUsers().then(r => r.data),
   })
   const nhanVienList = Array.isArray(nhanVienRaw) ? nhanVienRaw : []
 
@@ -178,7 +177,9 @@ export default function OrderCreate() {
       return s + Math.max(0, tienHang - l.so_tien_giam_gia)
     }
     return s + tienHang
-  }, 0) + extraLines.reduce((s, l) => s + l.don_gia, 0)
+  }, 0)
+    + extraLines.reduce((s, l) => s + l.don_gia, 0)
+    + pendingTaiSan.reduce((s, t) => s + t.gia_tri, 0)
 
   const handleSubmit = async () => {
     try {
@@ -197,6 +198,7 @@ export default function OrderCreate() {
         phap_nhan_sx_id: values.phap_nhan_sx_id ?? null,
         phan_xuong_id: values.phan_xuong_id ?? null,
         nv_kinh_doanh_id: values.nv_kinh_doanh_id ?? null,
+        nv_theo_doi_id: values.nv_theo_doi_id ?? null,
         ngay_giao_hang: values.ngay_giao_hang
           ? dayjs(values.ngay_giao_hang).format('YYYY-MM-DD')
           : undefined,
@@ -228,6 +230,16 @@ export default function OrderCreate() {
             dvt: 'lần',
             ghi_chu_san_pham: l.ghi_chu || undefined,
           })),
+          ...pendingTaiSan.filter(t => t.gia_tri > 0).map(t => ({
+            product_id: null,
+            ten_hang: `${t.loai === 'ban_in' ? 'Bản in' : 'Khuôn bế'}${t.mo_ta ? ` - ${t.mo_ta}` : ''}`,
+            so_luong: 1,
+            don_gia: t.gia_tri,
+            ty_le_giam_gia: 0,
+            so_tien_giam_gia: 0,
+            dvt: 'bộ',
+            ghi_chu_san_pham: t.ghi_chu || undefined,
+          })),
         ],
       }
       const res = await salesOrdersApi.create(payload)
@@ -240,9 +252,9 @@ export default function OrderCreate() {
           pendingTaiSan.map(t =>
             taiSanInApi.create({
               loai: t.loai,
-              mo_ta: t.mo_ta,
+              mo_ta: t.mo_ta || undefined,
               gia_tri: t.gia_tri,
-              ghi_chu: t.ghi_chu,
+              ghi_chu: t.ghi_chu || undefined,
               customer_id: values.customer_id,
               sales_order_thu_id: orderId,
               ngay_tao: today,
@@ -494,7 +506,16 @@ export default function OrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="nv_kinh_doanh_id" label="NV kinh doanh">
+                  <Form.Item name="nv_kinh_doanh_id" label="NV phụ trách">
+                    <Select
+                      showSearch allowClear optionFilterProp="label"
+                      placeholder="Chọn nhân viên..."
+                      options={nhanVienList.map(nv => ({ value: nv.id, label: nv.ho_ten }))}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="nv_theo_doi_id" label="NV theo dõi đơn hàng">
                     <Select
                       showSearch allowClear optionFilterProp="label"
                       placeholder="Chọn nhân viên..."
@@ -774,7 +795,7 @@ export default function OrderCreate() {
             )}
             {pendingTaiSan.length > 0 && (
               <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
-                Thiết kế sẽ nhận và điền đầy đủ chi tiết (giá, NCC) sau khi đơn được lưu.
+                <b>Giá tính KH</b>: giá bán cho khách hàng — sẽ được thêm vào dòng đơn hàng và tính vào tổng tiền. Giá mua từ NCC (chi phí thực tế) để Thiết kế điền sau.
               </div>
             )}
           </Card>

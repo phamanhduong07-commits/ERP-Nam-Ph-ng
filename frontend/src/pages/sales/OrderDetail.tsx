@@ -175,6 +175,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     onError: (e: unknown) => message.error(apiErrorMsg(e, 'Cập nhật thất bại')),
   })
 
+
   const handleTaoLenh = async () => {
     try {
       const vals = await lenhForm.validateFields()
@@ -474,6 +475,14 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         </Col>
         <Col>
           <Space wrap>
+            {order.trang_thai === 'moi' && (
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                onClick={() => navigate(`/sales/orders/${order.id}/edit`)}
+              >
+                Sửa đơn hàng
+              </Button>
+            )}
             <Button
               size={embedded ? 'small' : 'middle'}
               icon={<PrinterOutlined />}

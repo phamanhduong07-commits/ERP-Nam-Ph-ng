@@ -43,6 +43,12 @@ export interface SalesOrderItem {
   mat_3: string | null;   mat_3_dl: number | null
   loai_in: string | null
   so_mau: number | null
+  loai_lan: string | null
+  c_tham: string | null
+  can_man: string | null
+  kho_tt: number | null
+  dai_tt: number | null
+  dien_tich: number | null
   production_order_item_id: number | null
   // Thông số gia công (tùy chọn, kế thừa từ báo giá)
   c_tham?: string | null
@@ -69,6 +75,10 @@ export interface SalesOrder {
   ten_phap_nhan_sx: string | null
   phan_xuong_id: number | null
   ten_phan_xuong: string | null
+  nv_kinh_doanh_id: number | null
+  ten_nv_kinh_doanh: string | null
+  nv_theo_doi_id: number | null
+  ten_nv_theo_doi: string | null
   trang_thai: string
   ngay_giao_hang: string | null
   dia_chi_giao: string | null
@@ -78,6 +88,12 @@ export interface SalesOrder {
   ty_le_giam_gia: number
   so_tien_giam_gia: number
   tong_tien_sau_giam: number
+  chi_phi_bang_in: number
+  chi_phi_khuon: number
+  chi_phi_van_chuyen: number
+  ty_le_vat: number
+  tien_vat: number
+  dieu_khoan: string | null
   items: SalesOrderItem[]
   created_by_name: string | null
   ten_nguoi_duyet: string | null
@@ -115,6 +131,28 @@ export interface CreateOrderItemPayload {
   ngay_giao_hang?: string
   ghi_chu_san_pham?: string
   yeu_cau_in?: string
+  phan_xuong_id?: number | null
+  // Spec kỹ thuật (override Product defaults)
+  loai_thung?: string | null
+  dai?: number | null
+  rong?: number | null
+  cao?: number | null
+  so_lop?: number | null
+  to_hop_song?: string | null
+  mat?: string | null;     mat_dl?: number | null
+  song_1?: string | null;  song_1_dl?: number | null
+  mat_1?: string | null;   mat_1_dl?: number | null
+  song_2?: string | null;  song_2_dl?: number | null
+  mat_2?: string | null;   mat_2_dl?: number | null
+  song_3?: string | null;  song_3_dl?: number | null
+  mat_3?: string | null;   mat_3_dl?: number | null
+  loai_in?: string | null
+  so_mau?: number | null
+  c_tham?: string | null
+  can_man?: string | null
+  kho_tt?: number | null
+  dai_tt?: number | null
+  dien_tich?: number | null
 }
 
 export interface CreateOrderPayload {
@@ -125,11 +163,17 @@ export interface CreateOrderPayload {
   phap_nhan_sx_id?: number | null
   phan_xuong_id?: number | null
   nv_kinh_doanh_id?: number | null
+  nv_theo_doi_id?: number | null
   ngay_giao_hang?: string
-  dia_chi_giao?: string
-  ghi_chu?: string
+  dia_chi_giao?: string | null
+  ghi_chu?: string | null
   ty_le_giam_gia?: number
   so_tien_giam_gia?: number
+  chi_phi_bang_in?: number
+  chi_phi_khuon?: number
+  chi_phi_van_chuyen?: number
+  ty_le_vat?: number
+  dieu_khoan?: string | null
   items: CreateOrderItemPayload[]
 }
 
