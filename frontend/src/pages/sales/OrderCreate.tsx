@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Card, Form, Select, DatePicker, Input, Button, Table, Space,
-  InputNumber, Typography, Row, Col, Divider, message, Empty, Spin, Tag,
+  InputNumber, Typography, Row, Col, Divider, message, Empty, Spin, Tag, Tooltip,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined, CarOutlined, PrinterOutlined } from '@ant-design/icons'
+import {
+  PlusOutlined, DeleteOutlined, ArrowLeftOutlined,
+  CarOutlined, PrinterOutlined, SettingOutlined,
+} from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { customersApi } from '../../api/customers'
@@ -16,15 +19,17 @@ import { warehouseApi } from '../../api/warehouse'
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 import { taiSanInApi } from '../../api/taiSanIn'
-import type { Product } from '../../api/products'
+import type { ProductFull } from '../../api/products'
 import EmptyState from "../../components/EmptyState"
+import OrderItemSpecModal, { EMPTY_SPEC } from './components/OrderItemSpecModal'
+import type { OrderItemSpec } from './components/OrderItemSpecModal'
 
 const { Title, Text } = Typography
 
 interface OrderLine {
   key: string
   product_id: number
-  product: Product
+  product: ProductFull
   so_luong: number
   don_gia: number
   ty_le_giam_gia: number
@@ -33,6 +38,7 @@ interface OrderLine {
   ghi_chu_san_pham: string | null
   yeu_cau_in: string | null
   phan_xuong_id: number | null
+  spec: OrderItemSpec
 }
 
 interface ExtraLine {
@@ -62,6 +68,8 @@ export default function OrderCreate() {
   const [productSearch, setProductSearch] = useState('')
   const [customerOptions, setCustomerOptions] = useState<{ value: number; label: string }[]>([])
   const [customerSearching, setCustomerSearching] = useState(false)
+  const [specModalOpen, setSpecModalOpen] = useState(false)
+  const [specModalTarget, setSpecModalTarget] = useState<string | null>(null)
 
   const autoFillSoPoKh = (maKh: string | null, ngayDon?: unknown) => {
     const d = ngayDon ? dayjs(ngayDon as string) : dayjs()
@@ -112,7 +120,7 @@ export default function OrderCreate() {
     enabled: true,
   })
 
-  const addLine = (product: Product) => {
+  const addLine = (product: ProductFull) => {
     if (lines.find((l) => l.product_id === product.id)) {
       message.warning('Sản phẩm đã có trong đơn hàng')
       return
@@ -129,6 +137,34 @@ export default function OrderCreate() {
       ghi_chu_san_pham: null,
       yeu_cau_in: null,
       phan_xuong_id: null,
+      spec: {
+        ...EMPTY_SPEC,
+        loai_thung: product.loai_thung ?? null,
+        dai: product.dai ? Number(product.dai) : null,
+        rong: product.rong ? Number(product.rong) : null,
+        cao: product.cao ? Number(product.cao) : null,
+        so_lop: product.so_lop ? Number(product.so_lop) : null,
+        to_hop_song: product.to_hop_song ?? null,
+        mat: product.mat ?? null,
+        mat_dl: product.mat_dl ?? null,
+        song_1: product.song_1 ?? null,
+        song_1_dl: product.song_1_dl ?? null,
+        mat_1: product.mat_1 ?? null,
+        mat_1_dl: product.mat_1_dl ?? null,
+        song_2: product.song_2 ?? null,
+        song_2_dl: product.song_2_dl ?? null,
+        mat_2: product.mat_2 ?? null,
+        mat_2_dl: product.mat_2_dl ?? null,
+        song_3: product.song_3 ?? null,
+        song_3_dl: product.song_3_dl ?? null,
+        mat_3: product.mat_3 ?? null,
+        mat_3_dl: product.mat_3_dl ?? null,
+        so_mau: product.so_mau ? Number(product.so_mau) : null,
+        loai_lan: product.loai_lan ?? null,
+        loai_in: product.loai_in === 1 ? 'flexo' : product.loai_in === 2 ? 'ky_thuat_so' : null,
+        c_tham: product.chong_tham === 1 ? '1 mặt' : product.chong_tham === 2 ? '2 mặt' : null,
+        can_man: product.can_mang === 1 ? '1 mặt' : product.can_mang === 2 ? '2 mặt' : null,
+      },
     }])
   }
 
@@ -169,17 +205,23 @@ export default function OrderCreate() {
     setLines((prev) => prev.map((l) => l.key === key ? { ...l, [field]: value } : l))
   }
 
-  const tongTien = lines.reduce((s, l) => {
+  const openSpecModal = (key: string) => {
+    setSpecModalTarget(key)
+    setSpecModalOpen(true)
+  }
+
+  const handleSpecSave = (spec: OrderItemSpec) => {
+    if (specModalTarget) updateLine(specModalTarget, 'spec', spec)
+    setSpecModalOpen(false)
+    setSpecModalTarget(null)
+  }
+
+  const tongTienHang = lines.reduce((s, l) => {
     const tienHang = l.so_luong * l.don_gia
-    if (l.ty_le_giam_gia > 0) {
-      return s + tienHang * (1 - l.ty_le_giam_gia / 100)
-    } else if (l.so_tien_giam_gia > 0) {
-      return s + Math.max(0, tienHang - l.so_tien_giam_gia)
-    }
+    if (l.ty_le_giam_gia > 0) return s + tienHang * (1 - l.ty_le_giam_gia / 100)
+    if (l.so_tien_giam_gia > 0) return s + Math.max(0, tienHang - l.so_tien_giam_gia)
     return s + tienHang
-  }, 0)
-    + extraLines.reduce((s, l) => s + l.don_gia, 0)
-    + pendingTaiSan.reduce((s, t) => s + t.gia_tri, 0)
+  }, 0) + extraLines.reduce((s, l) => s + l.don_gia, 0) + pendingTaiSan.reduce((s, t) => s + t.gia_tri, 0)
 
   const handleSubmit = async () => {
     try {
@@ -206,6 +248,11 @@ export default function OrderCreate() {
         ghi_chu: values.ghi_chu,
         ty_le_giam_gia: values.ty_le_giam_gia || 0,
         so_tien_giam_gia: values.so_tien_giam_gia || 0,
+        chi_phi_bang_in: values.chi_phi_bang_in || 0,
+        chi_phi_khuon: values.chi_phi_khuon || 0,
+        chi_phi_van_chuyen: values.chi_phi_van_chuyen || 0,
+        ty_le_vat: values.ty_le_vat ?? 8,
+        dieu_khoan: values.dieu_khoan || null,
         items: [
           ...lines.map((l) => ({
             product_id: l.product_id,
@@ -219,6 +266,7 @@ export default function OrderCreate() {
             ghi_chu_san_pham: l.ghi_chu_san_pham || undefined,
             yeu_cau_in: l.yeu_cau_in || undefined,
             phan_xuong_id: l.phan_xuong_id || undefined,
+            ...l.spec,
           })),
           ...extraLines.map((l) => ({
             product_id: null,
@@ -246,7 +294,6 @@ export default function OrderCreate() {
       const orderId = res.data.id
       const sodon = res.data.so_don
 
-      // Tạo TaiSanIn đề xuất (bản in / khuôn bế) sau khi có orderId
       if (pendingTaiSan.length > 0) {
         await Promise.allSettled(
           pendingTaiSan.map(t =>
@@ -275,11 +322,13 @@ export default function OrderCreate() {
     }
   }
 
+  const specTargetLine = lines.find(l => l.key === specModalTarget)
+
   const columns: ColumnsType<OrderLine> = [
     {
       title: 'Mã SP',
       dataIndex: ['product', 'ma_amis'],
-      width: 110,
+      width: 100,
       render: (v) => <Text code style={{ fontSize: 11 }}>{v}</Text>,
     },
     {
@@ -288,17 +337,20 @@ export default function OrderCreate() {
       ellipsis: true,
     },
     {
-      title: 'Kích thước',
-      width: 110,
-      render: (_, r) => r.product.dai
-        ? `${Number(r.product.dai)}×${Number(r.product.rong ?? 0)}×${Number(r.product.cao ?? 0)}`
-        : '—',
-    },
-    {
-      title: 'Lớp',
-      dataIndex: ['product', 'so_lop'],
-      width: 50,
+      title: 'KT',
+      width: 40,
       align: 'center',
+      render: (_, r) => (
+        <Tooltip title="Thông số kỹ thuật">
+          <Button
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={() => openSpecModal(r.key)}
+            type={r.spec.so_lop ? 'primary' : 'default'}
+            ghost={!!r.spec.so_lop}
+          />
+        </Tooltip>
+      ),
     },
     {
       title: 'Số lượng',
@@ -327,7 +379,7 @@ export default function OrderCreate() {
     },
     {
       title: '% Giảm',
-      width: 80,
+      width: 75,
       render: (_, r) => (
         <InputNumber
           min={0}
@@ -367,10 +419,10 @@ export default function OrderCreate() {
     },
     {
       title: 'Ghi chú',
-      width: 160,
+      width: 150,
       render: (_, r) => (
         <Input
-          placeholder="Yêu cầu in, ghi chú..."
+          placeholder="Ghi chú..."
           value={r.ghi_chu_san_pham || ''}
           onChange={(e) => updateLine(r.key, 'ghi_chu_san_pham', e.target.value)}
           size="small"
@@ -379,7 +431,7 @@ export default function OrderCreate() {
     },
     {
       title: 'Xưởng SX',
-      width: 130,
+      width: 120,
       render: (_, r) => (
         <Select
           size="small"
@@ -396,7 +448,7 @@ export default function OrderCreate() {
     },
     {
       title: '',
-      width: 40,
+      width: 36,
       render: (_, r) => (
         <Button
           size="small"
@@ -440,6 +492,7 @@ export default function OrderCreate() {
                         setSelectedCustomerId(v as number)
                         customersApi.get(v as number).then(r => {
                           if (r.data?.dia_chi_giao_hang) form.setFieldValue('dia_chi_giao', r.data.dia_chi_giao_hang)
+                          if (r.data?.dieu_khoan_tt) form.setFieldValue('dieu_khoan', r.data.dieu_khoan_tt)
                           const maKh = r.data?.ma_kh ?? null
                           setSelectedCustomerMaKh(maKh)
                           autoFillSoPoKh(maKh, form.getFieldValue('ngay_don'))
@@ -482,7 +535,7 @@ export default function OrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="phap_nhan_id" label="Pháp nhân">
+                  <Form.Item name="phap_nhan_id" label="Pháp nhân bán hàng">
                     <Select
                       showSearch allowClear placeholder="Chọn pháp nhân..."
                       filterOption={(input, option) =>
@@ -496,12 +549,26 @@ export default function OrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="phan_xuong_id" label="Nơi sản xuất">
+                  <Form.Item name="phap_nhan_sx_id" label="Pháp nhân sản xuất">
+                    <Select
+                      showSearch allowClear placeholder="Chọn pháp nhân SX..."
+                      filterOption={(input, option) =>
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={phapNhanList?.map((p) => ({
+                        value: p.id,
+                        label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+                      }))}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="phan_xuong_id" label="Nơi sản xuất mặc định">
                     <Select
                       allowClear placeholder="Chọn xưởng sản xuất..."
                       options={phanXuongList
-                        .filter(p => p.trang_thai)
-                        .map(p => ({ value: p.id, label: p.ten_xuong }))}
+                        .filter((p: { trang_thai: boolean }) => p.trang_thai)
+                        .map((p: { id: number; ten_xuong: string }) => ({ value: p.id, label: p.ten_xuong }))}
                     />
                   </Form.Item>
                 </Col>
@@ -510,7 +577,7 @@ export default function OrderCreate() {
                     <Select
                       showSearch allowClear optionFilterProp="label"
                       placeholder="Chọn nhân viên..."
-                      options={nhanVienList.map(nv => ({ value: nv.id, label: nv.ho_ten }))}
+                      options={nhanVienList.map((nv: { id: number; ho_ten: string }) => ({ value: nv.id, label: nv.ho_ten }))}
                     />
                   </Form.Item>
                 </Col>
@@ -519,7 +586,7 @@ export default function OrderCreate() {
                     <Select
                       showSearch allowClear optionFilterProp="label"
                       placeholder="Chọn nhân viên..."
-                      options={nhanVienList.map(nv => ({ value: nv.id, label: nv.ho_ten }))}
+                      options={nhanVienList.map((nv: { id: number; ho_ten: string }) => ({ value: nv.id, label: nv.ho_ten }))}
                     />
                   </Form.Item>
                 </Col>
@@ -533,24 +600,58 @@ export default function OrderCreate() {
                     <Input.TextArea rows={2} placeholder="Ghi chú..." />
                   </Form.Item>
                 </Col>
+
                 <Col span={12}>
                   <Form.Item name="ty_le_giam_gia" label="% Giảm giá đơn hàng">
-                    <InputNumber
-                      min={0}
-                      max={100}
-                      placeholder="0"
-                      style={{ width: '100%' }}
-                    />
+                    <InputNumber min={0} max={100} placeholder="0" style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="so_tien_giam_gia" label="Số tiền giảm giá đơn hàng">
                     <InputNumber
-                      min={0}
-                      placeholder="0"
+                      min={0} placeholder="0"
                       formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                       style={{ width: '100%' }}
                     />
+                  </Form.Item>
+                </Col>
+
+                <Col span={8}>
+                  <Form.Item name="chi_phi_bang_in" label="Chi phí bản in (đ)">
+                    <InputNumber
+                      min={0} placeholder="0"
+                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="chi_phi_khuon" label="Chi phí khuôn bế (đ)">
+                    <InputNumber
+                      min={0} placeholder="0"
+                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="chi_phi_van_chuyen" label="Chi phí vận chuyển (đ)">
+                    <InputNumber
+                      min={0} placeholder="0"
+                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col span={8}>
+                  <Form.Item name="ty_le_vat" label="VAT (%)" initialValue={8}>
+                    <InputNumber min={0} max={100} placeholder="8" style={{ width: '100%' }} addonAfter="%" />
+                  </Form.Item>
+                </Col>
+                <Col span={16}>
+                  <Form.Item name="dieu_khoan" label="Điều khoản thanh toán">
+                    <Input.TextArea rows={1} placeholder="Thanh toán trong 30 ngày..." />
                   </Form.Item>
                 </Col>
               </Row>
@@ -565,49 +666,16 @@ export default function OrderCreate() {
               rowKey="key"
               pagination={false}
               size="small"
+              scroll={{ x: 1000 }}
               locale={{ emptyText: <Empty description="Chưa có sản phẩm. Chọn từ danh sách bên phải." /> }}
               summary={() => lines.length > 0 ? (
                 <Table.Summary fixed>
                   <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={8} align="right">
+                    <Table.Summary.Cell index={0} colSpan={7} align="right">
                       <Text strong>Tổng tiền hàng:</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={1} align="right">
-                      <Text>{new Intl.NumberFormat('vi-VN').format(tongTien)}đ</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={2} colSpan={2} />
-                  </Table.Summary.Row>
-                  {(form.getFieldValue('ty_le_giam_gia') > 0 || form.getFieldValue('so_tien_giam_gia') > 0) && (
-                    <Table.Summary.Row>
-                      <Table.Summary.Cell index={0} colSpan={8} align="right">
-                        <Text strong>Giảm giá đơn hàng:</Text>
-                      </Table.Summary.Cell>
-                      <Table.Summary.Cell index={1} align="right">
-                        <Text type="danger">
-                          -{new Intl.NumberFormat('vi-VN').format(
-                            form.getFieldValue('ty_le_giam_gia') > 0
-                              ? tongTien * form.getFieldValue('ty_le_giam_gia') / 100
-                              : Math.min(tongTien, form.getFieldValue('so_tien_giam_gia') || 0)
-                          )}đ
-                        </Text>
-                      </Table.Summary.Cell>
-                      <Table.Summary.Cell index={2} colSpan={2} />
-                    </Table.Summary.Row>
-                  )}
-                  <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={8} align="right">
-                      <Text strong style={{ fontSize: 16 }}>Tổng cộng:</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
-                      <Text strong style={{ fontSize: 16, color: '#1677ff' }}>
-                        {new Intl.NumberFormat('vi-VN').format(
-                          form.getFieldValue('ty_le_giam_gia') > 0
-                            ? tongTien * (1 - form.getFieldValue('ty_le_giam_gia') / 100)
-                            : form.getFieldValue('so_tien_giam_gia') > 0
-                            ? Math.max(0, tongTien - (form.getFieldValue('so_tien_giam_gia') || 0))
-                            : tongTien
-                        )}đ
-                      </Text>
+                      <Text>{new Intl.NumberFormat('vi-VN').format(tongTienHang)}đ</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={2} colSpan={2} />
                   </Table.Summary.Row>
@@ -644,13 +712,10 @@ export default function OrderCreate() {
                       dataIndex: 'don_gia',
                       render: (v, r) => (
                         <InputNumber
-                          value={v}
-                          min={0}
+                          value={v} min={0}
                           formatter={val => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                           onChange={val => updateExtraLine(r.key, 'don_gia', val || 0)}
-                          size="small"
-                          style={{ width: '100%' }}
-                          addonAfter="đ"
+                          size="small" style={{ width: '100%' }} addonAfter="đ"
                         />
                       ),
                     },
@@ -659,8 +724,7 @@ export default function OrderCreate() {
                       dataIndex: 'ghi_chu',
                       render: (v, r) => (
                         <Input
-                          value={v}
-                          placeholder="Ghi chú"
+                          value={v} placeholder="Ghi chú"
                           onChange={e => updateExtraLine(r.key, 'ghi_chu', e.target.value)}
                           size="small"
                         />
@@ -758,17 +822,12 @@ export default function OrderCreate() {
                   {
                     width: 160,
                     dataIndex: 'gia_tri',
-                    title: 'Giá tính KH',
                     render: (v, r) => (
                       <InputNumber
-                        value={v}
-                        min={0}
-                        placeholder="Giá tính KH (đ)"
+                        value={v} min={0}
                         formatter={val => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                         onChange={val => updatePendingTaiSan(r.key, 'gia_tri', val ?? 0)}
-                        size="small"
-                        style={{ width: '100%' }}
-                        addonAfter="đ"
+                        size="small" style={{ width: '100%' }} addonAfter="đ"
                       />
                     ),
                   },
@@ -777,8 +836,7 @@ export default function OrderCreate() {
                     dataIndex: 'ghi_chu',
                     render: (v, r) => (
                       <Input
-                        value={v}
-                        placeholder="Ghi chú"
+                        value={v} placeholder="Ghi chú"
                         onChange={e => updatePendingTaiSan(r.key, 'ghi_chu', e.target.value)}
                         size="small"
                       />
@@ -795,7 +853,7 @@ export default function OrderCreate() {
             )}
             {pendingTaiSan.length > 0 && (
               <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
-                <b>Giá tính KH</b>: giá bán cho khách hàng — sẽ được thêm vào dòng đơn hàng và tính vào tổng tiền. Giá mua từ NCC (chi phí thực tế) để Thiết kế điền sau.
+                <b>Giá tính KH</b>: giá bán cho khách hàng — sẽ được thêm vào dòng đơn hàng. Giá mua từ NCC để Thiết kế điền sau.
               </div>
             )}
           </Card>
@@ -842,6 +900,14 @@ export default function OrderCreate() {
           </Card>
         </Col>
       </Row>
+
+      <OrderItemSpecModal
+        open={specModalOpen}
+        spec={specTargetLine?.spec ?? EMPTY_SPEC}
+        tenHang={specTargetLine?.product.ten_hang}
+        onClose={() => { setSpecModalOpen(false); setSpecModalTarget(null) }}
+        onSave={handleSpecSave}
+      />
     </div>
   )
 }

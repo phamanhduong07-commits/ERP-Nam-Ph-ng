@@ -39,6 +39,7 @@ class SalesOrderItemCreate(BaseModel):
     mat_3_dl: Decimal | None = None
     loai_in: str | None = None
     so_mau: int | None = None
+    loai_lan: str | None = None
     c_tham: str | None = None
     can_man: str | None = None
     kho_tt: Decimal | None = None
@@ -184,6 +185,7 @@ class SalesOrderItemUpsert(BaseModel):
     mat_3_dl: Decimal | None = None
     loai_in: str | None = None
     so_mau: int | None = None
+    loai_lan: str | None = None
     c_tham: str | None = None
     can_man: str | None = None
     kho_tt: Decimal | None = None

@@ -46,20 +46,14 @@ export interface SalesOrderItem {
   loai_lan: string | null
   c_tham: string | null
   can_man: string | null
+  may_in: string | null
   kho_tt: number | null
   dai_tt: number | null
   dien_tich: number | null
   production_order_item_id: number | null
-  // Thông số gia công (tùy chọn, kế thừa từ báo giá)
-  c_tham?: string | null
-  can_man?: string | null
-  may_in?: string | null
-  kho_tt?: number | null
-  dai_tt?: number | null
-  dien_tich?: number | null
-  phan_xuong_id?: number | null
-  ten_phan_xuong?: string | null
-  gia_phoi?: number
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  gia_phoi: number
 }
 
 export interface SalesOrder {
@@ -148,6 +142,7 @@ export interface CreateOrderItemPayload {
   mat_3?: string | null;   mat_3_dl?: number | null
   loai_in?: string | null
   so_mau?: number | null
+  loai_lan?: string | null
   c_tham?: string | null
   can_man?: string | null
   kho_tt?: number | null

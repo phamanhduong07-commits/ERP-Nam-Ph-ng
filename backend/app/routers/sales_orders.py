@@ -65,7 +65,9 @@ from app.utils.log import get_logger
 
 logger = get_logger(__name__)
 
-_LOAI_IN_MAP = {0: "khong_in", 1: "flexo", 2: "ky_thuat_so"}
+_LOAI_IN_MAP   = {1: "flexo", 2: "ky_thuat_so"}
+_CHONG_THAM_MAP = {1: "1 mặt", 2: "2 mặt"}
+_CAN_MANG_MAP   = {1: "1 mặt", 2: "2 mặt"}
 
 _SPEC_FIELDS = {
     "loai_thung", "dai", "rong", "cao", "so_lop", "to_hop_song",
@@ -90,9 +92,11 @@ def _spec_from_product(p: Product) -> dict:
         mat_2=p.mat_2, mat_2_dl=p.mat_2_dl,
         song_3=p.song_3, song_3_dl=p.song_3_dl,
         mat_3=p.mat_3, mat_3_dl=p.mat_3_dl,
-        loai_in=_LOAI_IN_MAP.get(p.loai_in, "khong_in"),
+        loai_in=_LOAI_IN_MAP.get(p.loai_in, None),
         so_mau=p.so_mau,
         loai_lan=p.loai_lan,
+        c_tham=_CHONG_THAM_MAP.get(p.chong_tham, None),
+        can_man=_CAN_MANG_MAP.get(p.can_mang, None),
     )
 
 
