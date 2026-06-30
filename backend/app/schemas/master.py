@@ -168,6 +168,8 @@ class ProductUpdate(BaseModel):
     dan: bool | None = None
     loai_thung: str | None = None
     gia_ban: Decimal | None = None
+    gia_mua: Decimal | None = None
+    gia_dinh_muc: Decimal | None = None
     ghi_chu: str | None = None
     trang_thai: bool | None = None
     loai_in: int | None = None

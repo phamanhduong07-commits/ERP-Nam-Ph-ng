@@ -48,6 +48,8 @@ export interface ProductFull extends Product {
   phan_xuong: string | null
   loai: string | null
   ghi_chu: string | null
+  gia_mua: number
+  gia_dinh_muc: number
   ton_toi_thieu: number | null
   ton_toi_da: number | null
   khong_tinh_nxt: boolean

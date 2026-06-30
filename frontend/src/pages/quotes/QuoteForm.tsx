@@ -434,6 +434,8 @@ export default function QuoteForm() {
         so_lop: ci.so_lop,
         so_mau: ci.so_mau ?? 0,
         gia_ban: ci.gia_ban ?? 0,
+        gia_mua: ci.gia_phoi ?? 0,
+        gia_dinh_muc: ci.gia_noi_bo ?? 0,
         ghim: ci.ghim ?? false,
         dan: ci.dan ?? false,
         loai_thung: ci.loai_thung ?? null,
