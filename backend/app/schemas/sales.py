@@ -5,7 +5,7 @@ from app.schemas.master import CustomerShort, ProductShort
 
 
 class SalesOrderItemCreate(BaseModel):
-    product_id: int
+    product_id: int | None = None  # None = dòng phí/dịch vụ tự do (vận chuyển, v.v.)
     ten_hang: str = ""
     so_luong: Decimal
     don_gia: Decimal
@@ -110,7 +110,7 @@ class SalesOrderCreate(BaseModel):
 
 class SalesOrderItemUpsert(BaseModel):
     id: int | None = None  # None = insert mới; có id = update item hiện có
-    product_id: int
+    product_id: int | None = None  # None = dòng phí/dịch vụ tự do
     ten_hang: str = ""
     so_luong: Decimal
     don_gia: Decimal

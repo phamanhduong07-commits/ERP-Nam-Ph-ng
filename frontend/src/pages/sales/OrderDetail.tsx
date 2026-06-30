@@ -4,14 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Space, Button, Typography,
   Divider, Popconfirm, message, Skeleton, Row, Col, Modal, DatePicker, Form, Select,
-  Drawer, Tooltip, Alert, Dropdown, Popover,
+  Drawer, Tooltip, Alert, Dropdown, Popover, Input,
 } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   ArrowLeftOutlined, CheckOutlined, CloseOutlined,
   PrinterOutlined, ThunderboltOutlined, CalculatorOutlined,
   FileExcelOutlined, PercentageOutlined, EyeOutlined, RollbackOutlined,
-  FilePdfOutlined, DownOutlined,
+  FilePdfOutlined, DownOutlined, PlusOutlined,
 } from '@ant-design/icons'
 
 import type { ColumnsType } from 'antd/es/table'
@@ -28,6 +28,8 @@ import { billingApi } from '../../api/billing'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import BomCalculatorPanel from '../production/BomCalculatorPanel'
+import { taiSanInApi, LOAI_LABELS, TRANG_THAI_LABELS as TSI_TRANG_THAI_LABELS, TRANG_THAI_COLORS as TSI_TRANG_THAI_COLORS } from '../../api/taiSanIn'
+import type { TaiSanInItem, TaiSanLoai, TaiSanTrangThai } from '../../api/taiSanIn'
 import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
@@ -50,6 +52,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   const [lenhForm] = Form.useForm()
   const [bomItemId, setBomItemId] = useState<number | null>(null)
   const [previewItem, setPreviewItem] = useState<SalesOrderItem | null>(null)
+  const [tsiCreateOpen, setTsiCreateOpen] = useState(false)
+  const [tsiForm] = Form.useForm()
   const { hasPermission } = usePermission()
   const canViewPrice = hasPermission('production.cost_analysis')
 
@@ -78,6 +82,25 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     staleTime: 5 * 60 * 1000,
   })
   const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
+
+  const { data: tsiList = [] } = useQuery({
+    queryKey: ['tai-san-in-by-order', order?.customer_id],
+    queryFn: () => taiSanInApi.list({ customer_id: order!.customer_id }).then(r => r.data),
+    enabled: !!order?.customer_id,
+    staleTime: 30_000,
+  })
+
+  const tsiCreateMut = useMutation({
+    mutationFn: (data: Parameters<typeof taiSanInApi.create>[0]) => taiSanInApi.create(data),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['tai-san-in-by-order', order?.customer_id] })
+      setTsiCreateOpen(false)
+      tsiForm.resetFields()
+      message.success('Đã tạo bản in / khuôn bế')
+      navigate(`/tai-san-in/${res.data.id}`)
+    },
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi tạo bản in')),
+  })
 
   const createInvoiceMut = useMutation({
     mutationFn: () => billingApi.createFromOrder(Number(id)),
@@ -795,6 +818,99 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           Cập nhật: {dayjs(order.updated_at).format('DD/MM/YYYY HH:mm')}
         </Text>
       </Card>
+
+      {/* Bản in / Khuôn bế */}
+      {order && (
+        <Card
+          size="small"
+          title="Bản in / Khuôn bế"
+          extra={
+            <Button
+              size="small"
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                tsiForm.setFieldsValue({
+                  customer_id: order.customer_id,
+                  sales_order_thu_id: order.id,
+                  ngay_tao: dayjs().format('YYYY-MM-DD'),
+                })
+                setTsiCreateOpen(true)
+              }}
+            >
+              Đề xuất mua
+            </Button>
+          }
+          style={{ marginTop: 16 }}
+        >
+          <Table<TaiSanInItem>
+            dataSource={tsiList}
+            rowKey="id"
+            size="small"
+            pagination={false}
+            locale={{ emptyText: 'Khách hàng này chưa có bản in / khuôn bế nào' }}
+            onRow={(r) => ({ onClick: () => navigate(`/tai-san-in/${r.id}`), style: { cursor: 'pointer' } })}
+            columns={[
+              { title: 'Mã', dataIndex: 'ma_tai_san', width: 140 },
+              {
+                title: 'Loại',
+                dataIndex: 'loai',
+                width: 100,
+                render: (v: TaiSanLoai) => <Tag color={v === 'ban_in' ? 'blue' : 'purple'}>{LOAI_LABELS[v]}</Tag>,
+              },
+              { title: 'Mô tả', dataIndex: 'mo_ta', ellipsis: true },
+              {
+                title: 'Trạng thái',
+                dataIndex: 'trang_thai',
+                width: 120,
+                render: (v: TaiSanTrangThai) => <Tag color={TSI_TRANG_THAI_COLORS[v]}>{TSI_TRANG_THAI_LABELS[v]}</Tag>,
+              },
+              {
+                title: 'Đã thu',
+                dataIndex: 'da_thu_tien',
+                width: 80,
+                align: 'center' as const,
+                render: (v: boolean, r: TaiSanInItem) =>
+                  r.nguoi_chi_tra === 'khach_hang' ? <Tag color={v ? 'success' : 'warning'}>{v ? 'Rồi' : 'Chưa'}</Tag> : null,
+              },
+            ]}
+          />
+        </Card>
+      )}
+
+      {/* Modal tạo bản in / khuôn bế nhanh từ đơn hàng */}
+      <Modal
+        title="Đề xuất mua bản in / khuôn bế"
+        open={tsiCreateOpen}
+        onCancel={() => { setTsiCreateOpen(false); tsiForm.resetFields() }}
+        onOk={() => tsiForm.submit()}
+        okText="Gửi đề xuất"
+        confirmLoading={tsiCreateMut.isPending}
+        width={480}
+      >
+        <Form
+          form={tsiForm}
+          layout="vertical"
+          onFinish={(v) => tsiCreateMut.mutate(v)}
+        >
+          <Form.Item name="loai" label="Loại" rules={[{ required: true }]}>
+            <Select options={[
+              { value: 'ban_in', label: 'Bản in' },
+              { value: 'khuon_be', label: 'Khuôn bế' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="mo_ta" label="Mô tả ngắn">
+            <Input placeholder="VD: bản in 4 màu hộp 30x20" />
+          </Form.Item>
+          <Form.Item name="ghi_chu" label="Ghi chú">
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          {/* Thiết kế sẽ điền giá trị, người chi trả sau khi nhận yêu cầu */}
+          <Form.Item name="customer_id" hidden><Input /></Form.Item>
+          <Form.Item name="sales_order_thu_id" hidden><Input /></Form.Item>
+          <Form.Item name="ngay_tao" hidden><Input /></Form.Item>
+        </Form>
+      </Modal>
 
       {/* Drawer chi tiết sản phẩm */}
       <Drawer

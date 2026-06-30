@@ -67,6 +67,7 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
               ),
             },
             { key: '/sales/orders', to: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link>, permissions: ['sales_order.view'] },
+            { key: '/tai-san-in', to: '/tai-san-in', label: <Link to="/tai-san-in">Bản in / Khuôn bế</Link>, permissions: ['sales_order.view'] },
             { key: '/sales/returns', to: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link>, permissions: ['sales_order.view'] },
             { key: '/sales/theo-don-hang', to: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link>, permissions: ['sales_order.view'] },
             { key: '/sales/giao-hang', to: '/sales/giao-hang', label: <Link to="/sales/giao-hang">🚚 Giao hàng</Link>, permissions: ['sales_order.view'] },

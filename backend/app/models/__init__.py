@@ -47,4 +47,5 @@ import app.models.danhmuc_hr  # noqa: F401
 import app.models.danhmuc_nhom  # noqa: F401
 import app.models.loai_tien  # noqa: F401
 import app.models.ngan_hang  # noqa: F401
+import app.models.tai_san_in  # noqa: F401
 

@@ -176,15 +176,22 @@ def create_order(
 
     tong_tien = 0
     for item_data in data.items:
-        product = db.query(Product).filter(Product.id == item_data.product_id, Product.trang_thai == True).first()
-        if not product:
-            raise HTTPException(status_code=404, detail=f"Sản phẩm ID {item_data.product_id} không tồn tại")
+        if item_data.product_id is not None:
+            product = db.query(Product).filter(Product.id == item_data.product_id, Product.trang_thai == True).first()
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Sản phẩm ID {item_data.product_id} không tồn tại")
+            ten_hang = item_data.ten_hang or product.ten_hang
+            dvt = item_data.dvt or product.dvt
+        else:
+            product = None
+            ten_hang = item_data.ten_hang or "Dịch vụ"
+            dvt = item_data.dvt or "lần"
 
         item = SalesOrderItem(
             product_id=item_data.product_id,
-            ten_hang=item_data.ten_hang or product.ten_hang,
+            ten_hang=ten_hang,
             so_luong=item_data.so_luong,
-            dvt=item_data.dvt or product.dvt,
+            dvt=dvt,
             don_gia=item_data.don_gia,
             ty_le_giam_gia=item_data.ty_le_giam_gia,
             so_tien_giam_gia=item_data.so_tien_giam_gia,
@@ -259,14 +266,20 @@ def update_order(
                     db_item.ten_hang = item_data.ten_hang
             else:
                 # Insert item mới
-                product = db.query(Product).filter(Product.id == item_data.product_id, Product.trang_thai == True).first()
-                if not product:
-                    raise HTTPException(status_code=404, detail=f"Sản phẩm ID {item_data.product_id} không tồn tại")
+                if item_data.product_id is not None:
+                    product = db.query(Product).filter(Product.id == item_data.product_id, Product.trang_thai == True).first()
+                    if not product:
+                        raise HTTPException(status_code=404, detail=f"Sản phẩm ID {item_data.product_id} không tồn tại")
+                    ten_hang = item_data.ten_hang or product.ten_hang
+                    dvt = item_data.dvt or product.dvt
+                else:
+                    ten_hang = item_data.ten_hang or "Dịch vụ"
+                    dvt = item_data.dvt or "lần"
                 new_item = SalesOrderItem(
                     product_id=item_data.product_id,
-                    ten_hang=item_data.ten_hang or product.ten_hang,
+                    ten_hang=ten_hang,
                     so_luong=item_data.so_luong,
-                    dvt=item_data.dvt or product.dvt,
+                    dvt=dvt,
                     don_gia=item_data.don_gia,
                     ty_le_giam_gia=item_data.ty_le_giam_gia,
                     so_tien_giam_gia=item_data.so_tien_giam_gia,

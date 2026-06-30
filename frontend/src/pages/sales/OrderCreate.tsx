@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Card, Form, Select, DatePicker, Input, Button, Table, Space,
-  InputNumber, Typography, Row, Col, Divider, message, Empty, Spin,
+  InputNumber, Typography, Row, Col, Divider, message, Empty, Spin, Tag,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined, CarOutlined, PrinterOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { customersApi } from '../../api/customers'
@@ -16,6 +16,7 @@ import { warehouseApi } from '../../api/warehouse'
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 import { usersApi } from '../../api/usersApi'
+import { taiSanInApi } from '../../api/taiSanIn'
 import type { Product } from '../../api/products'
 import EmptyState from "../../components/EmptyState"
 
@@ -35,10 +36,27 @@ interface OrderLine {
   phan_xuong_id: number | null
 }
 
+interface ExtraLine {
+  key: string
+  ten_hang: string
+  don_gia: number
+  ghi_chu: string
+}
+
+interface PendingTaiSan {
+  key: string
+  loai: 'ban_in' | 'khuon_be'
+  mo_ta: string
+  gia_tri: number
+  ghi_chu: string
+}
+
 export default function OrderCreate() {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [lines, setLines] = useState<OrderLine[]>([])
+  const [extraLines, setExtraLines] = useState<ExtraLine[]>([])
+  const [pendingTaiSan, setPendingTaiSan] = useState<PendingTaiSan[]>([])
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
   const [selectedCustomerMaKh, setSelectedCustomerMaKh] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -117,6 +135,37 @@ export default function OrderCreate() {
 
   const removeLine = (key: string) => setLines((prev) => prev.filter((l) => l.key !== key))
 
+  const addExtraLine = (preset?: Partial<ExtraLine>) => {
+    setExtraLines(prev => [...prev, {
+      key: `extra-${Date.now()}`,
+      ten_hang: preset?.ten_hang ?? '',
+      don_gia: preset?.don_gia ?? 0,
+      ghi_chu: preset?.ghi_chu ?? '',
+    }])
+  }
+
+  const removeExtraLine = (key: string) => setExtraLines(prev => prev.filter(l => l.key !== key))
+
+  const updateExtraLine = (key: string, field: keyof ExtraLine, value: unknown) => {
+    setExtraLines(prev => prev.map(l => l.key === key ? { ...l, [field]: value } : l))
+  }
+
+  const addPendingTaiSan = (loai: 'ban_in' | 'khuon_be') => {
+    setPendingTaiSan(prev => [...prev, {
+      key: `tsi-${Date.now()}`,
+      loai,
+      mo_ta: '',
+      gia_tri: 0,
+      ghi_chu: '',
+    }])
+  }
+
+  const removePendingTaiSan = (key: string) => setPendingTaiSan(prev => prev.filter(t => t.key !== key))
+
+  const updatePendingTaiSan = (key: string, field: keyof PendingTaiSan, value: unknown) => {
+    setPendingTaiSan(prev => prev.map(t => t.key === key ? { ...t, [field]: value } : t))
+  }
+
   const updateLine = (key: string, field: keyof OrderLine, value: unknown) => {
     setLines((prev) => prev.map((l) => l.key === key ? { ...l, [field]: value } : l))
   }
@@ -129,16 +178,17 @@ export default function OrderCreate() {
       return s + Math.max(0, tienHang - l.so_tien_giam_gia)
     }
     return s + tienHang
-  }, 0)
+  }, 0) + extraLines.reduce((s, l) => s + l.don_gia, 0)
 
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
-      if (lines.length === 0) {
+      if (lines.length === 0 && extraLines.length === 0) {
         message.error('Vui lòng thêm ít nhất 1 sản phẩm')
         return
       }
       setSaving(true)
+      const today = dayjs().format('YYYY-MM-DD')
       const payload = {
         customer_id: values.customer_id,
         ngay_don: dayjs(values.ngay_don).format('YYYY-MM-DD'),
@@ -154,23 +204,57 @@ export default function OrderCreate() {
         ghi_chu: values.ghi_chu,
         ty_le_giam_gia: values.ty_le_giam_gia || 0,
         so_tien_giam_gia: values.so_tien_giam_gia || 0,
-        items: lines.map((l) => ({
-          product_id: l.product_id,
-          ten_hang: l.product.ten_hang,
-          so_luong: l.so_luong,
-          don_gia: l.don_gia,
-          ty_le_giam_gia: l.ty_le_giam_gia,
-          so_tien_giam_gia: l.so_tien_giam_gia,
-          dvt: l.product.dvt,
-          ngay_giao_hang: l.ngay_giao_hang || undefined,
-          ghi_chu_san_pham: l.ghi_chu_san_pham || undefined,
-          yeu_cau_in: l.yeu_cau_in || undefined,
-          phan_xuong_id: l.phan_xuong_id || undefined,
-        })),
+        items: [
+          ...lines.map((l) => ({
+            product_id: l.product_id,
+            ten_hang: l.product.ten_hang,
+            so_luong: l.so_luong,
+            don_gia: l.don_gia,
+            ty_le_giam_gia: l.ty_le_giam_gia,
+            so_tien_giam_gia: l.so_tien_giam_gia,
+            dvt: l.product.dvt,
+            ngay_giao_hang: l.ngay_giao_hang || undefined,
+            ghi_chu_san_pham: l.ghi_chu_san_pham || undefined,
+            yeu_cau_in: l.yeu_cau_in || undefined,
+            phan_xuong_id: l.phan_xuong_id || undefined,
+          })),
+          ...extraLines.map((l) => ({
+            product_id: null,
+            ten_hang: l.ten_hang || 'Dịch vụ',
+            so_luong: 1,
+            don_gia: l.don_gia,
+            ty_le_giam_gia: 0,
+            so_tien_giam_gia: 0,
+            dvt: 'lần',
+            ghi_chu_san_pham: l.ghi_chu || undefined,
+          })),
+        ],
       }
       const res = await salesOrdersApi.create(payload)
-      message.success(`Tạo đơn hàng ${res.data.so_don} thành công`)
-      navigate(`/sales/orders/${res.data.id}`)
+      const orderId = res.data.id
+      const sodon = res.data.so_don
+
+      // Tạo TaiSanIn đề xuất (bản in / khuôn bế) sau khi có orderId
+      if (pendingTaiSan.length > 0) {
+        await Promise.allSettled(
+          pendingTaiSan.map(t =>
+            taiSanInApi.create({
+              loai: t.loai,
+              mo_ta: t.mo_ta,
+              gia_tri: t.gia_tri,
+              ghi_chu: t.ghi_chu,
+              customer_id: values.customer_id,
+              sales_order_thu_id: orderId,
+              ngay_tao: today,
+            })
+          )
+        )
+        message.success(`Tạo đơn hàng ${sodon} + ${pendingTaiSan.length} đề xuất bản in thành công`)
+      } else {
+        message.success(`Tạo đơn hàng ${sodon} thành công`)
+      }
+
+      navigate(`/sales/orders/${orderId}`)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       if (msg) message.error(msg)
@@ -510,6 +594,85 @@ export default function OrderCreate() {
               ) : null}
             />
 
+            {/* Dòng phí / dịch vụ (vận chuyển, v.v.) */}
+            {extraLines.length > 0 && (
+              <>
+                <Divider orientation="left" style={{ fontSize: 13, color: '#888', margin: '12px 0 8px' }}>
+                  Phí / Dịch vụ
+                </Divider>
+                <Table
+                  dataSource={extraLines}
+                  rowKey="key"
+                  pagination={false}
+                  size="small"
+                  showHeader={false}
+                  columns={[
+                    {
+                      dataIndex: 'ten_hang',
+                      render: (v, r) => (
+                        <Input
+                          value={v}
+                          placeholder="Tên phí / dịch vụ (VD: Phí vận chuyển)"
+                          onChange={e => updateExtraLine(r.key, 'ten_hang', e.target.value)}
+                          size="small"
+                        />
+                      ),
+                    },
+                    {
+                      width: 140,
+                      dataIndex: 'don_gia',
+                      render: (v, r) => (
+                        <InputNumber
+                          value={v}
+                          min={0}
+                          formatter={val => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                          onChange={val => updateExtraLine(r.key, 'don_gia', val || 0)}
+                          size="small"
+                          style={{ width: '100%' }}
+                          addonAfter="đ"
+                        />
+                      ),
+                    },
+                    {
+                      width: 160,
+                      dataIndex: 'ghi_chu',
+                      render: (v, r) => (
+                        <Input
+                          value={v}
+                          placeholder="Ghi chú"
+                          onChange={e => updateExtraLine(r.key, 'ghi_chu', e.target.value)}
+                          size="small"
+                        />
+                      ),
+                    },
+                    {
+                      width: 40,
+                      render: (_, r) => (
+                        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeExtraLine(r.key)} />
+                      ),
+                    },
+                  ] as ColumnsType<ExtraLine>}
+                />
+              </>
+            )}
+
+            <Space style={{ marginTop: 8 }} wrap>
+              <Button
+                size="small"
+                icon={<CarOutlined />}
+                onClick={() => addExtraLine({ ten_hang: 'Phí vận chuyển' })}
+              >
+                + Phí vận chuyển
+              </Button>
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => addExtraLine()}
+              >
+                + Phí / dịch vụ khác
+              </Button>
+            </Space>
+
             <Divider />
             <Row justify="end">
               <Col>
@@ -521,6 +684,99 @@ export default function OrderCreate() {
                 </Space>
               </Col>
             </Row>
+          </Card>
+
+          {/* Đề xuất bản in / khuôn bế */}
+          <Card
+            size="small"
+            title={
+              <Space>
+                <PrinterOutlined />
+                <span>Đề xuất bản in / khuôn bế</span>
+                {pendingTaiSan.length > 0 && <Tag color="blue">{pendingTaiSan.length}</Tag>}
+              </Space>
+            }
+            style={{ marginTop: 16 }}
+            extra={
+              <Space size={6}>
+                <Button size="small" onClick={() => addPendingTaiSan('ban_in')}>+ Bản in</Button>
+                <Button size="small" onClick={() => addPendingTaiSan('khuon_be')}>+ Khuôn bế</Button>
+              </Space>
+            }
+          >
+            {pendingTaiSan.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có đề xuất bản in / khuôn bế" />
+            ) : (
+              <Table
+                dataSource={pendingTaiSan}
+                rowKey="key"
+                pagination={false}
+                size="small"
+                showHeader={false}
+                columns={[
+                  {
+                    width: 100,
+                    dataIndex: 'loai',
+                    render: (v: string) => (
+                      <Tag color={v === 'ban_in' ? 'blue' : 'purple'}>
+                        {v === 'ban_in' ? 'Bản in' : 'Khuôn bế'}
+                      </Tag>
+                    ),
+                  },
+                  {
+                    dataIndex: 'mo_ta',
+                    render: (v, r) => (
+                      <Input
+                        value={v}
+                        placeholder="Mô tả ngắn (VD: bản in 4 màu hộp 30×20)"
+                        onChange={e => updatePendingTaiSan(r.key, 'mo_ta', e.target.value)}
+                        size="small"
+                      />
+                    ),
+                  },
+                  {
+                    width: 160,
+                    dataIndex: 'gia_tri',
+                    title: 'Giá tính KH',
+                    render: (v, r) => (
+                      <InputNumber
+                        value={v}
+                        min={0}
+                        placeholder="Giá tính KH (đ)"
+                        formatter={val => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        onChange={val => updatePendingTaiSan(r.key, 'gia_tri', val ?? 0)}
+                        size="small"
+                        style={{ width: '100%' }}
+                        addonAfter="đ"
+                      />
+                    ),
+                  },
+                  {
+                    width: 170,
+                    dataIndex: 'ghi_chu',
+                    render: (v, r) => (
+                      <Input
+                        value={v}
+                        placeholder="Ghi chú"
+                        onChange={e => updatePendingTaiSan(r.key, 'ghi_chu', e.target.value)}
+                        size="small"
+                      />
+                    ),
+                  },
+                  {
+                    width: 40,
+                    render: (_, r) => (
+                      <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removePendingTaiSan(r.key)} />
+                    ),
+                  },
+                ] as ColumnsType<PendingTaiSan>}
+              />
+            )}
+            {pendingTaiSan.length > 0 && (
+              <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
+                Thiết kế sẽ nhận và điền đầy đủ chi tiết (giá, NCC) sau khi đơn được lưu.
+              </div>
+            )}
           </Card>
         </Col>
 

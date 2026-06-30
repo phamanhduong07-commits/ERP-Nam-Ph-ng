@@ -237,6 +237,8 @@ const CheckInLocationsPage = lazy(() => import('./pages/hr/CheckInLocationsPage'
 const BenefitsPage = lazy(() => import('./pages/hr/BenefitsPage'))
 const PrintTemplatePage = lazy(() => import('./pages/master/PrintTemplatePage'))
 const DocsPage = lazy(() => import('./pages/docs/DocsPage'))
+const TaiSanInList = lazy(() => import('./pages/danhmuc/TaiSanInList'))
+const TaiSanInDetail = lazy(() => import('./pages/danhmuc/TaiSanInDetail'))
 const GpsTrackingPage = lazy(() => import('./pages/logistics/GpsTrackingPage'))
 const ChiPhiChuyenPage = lazy(() => import('./pages/logistics/ChiPhiChuyenPage'))
 const KmThucTePage = lazy(() => import('./pages/logistics/KmThucTePage'))
@@ -579,6 +581,8 @@ export default function App() {
             <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
             <Route path="master/print-templates" element={<ErrorBoundary><PrintTemplatePage /></ErrorBoundary>} />
             <Route path="docs" element={<ErrorBoundary><DocsPage /></ErrorBoundary>} />
+            <Route path="tai-san-in" element={<ErrorBoundary><TaiSanInList /></ErrorBoundary>} />
+            <Route path="tai-san-in/:id" element={<ErrorBoundary><TaiSanInDetail /></ErrorBoundary>} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

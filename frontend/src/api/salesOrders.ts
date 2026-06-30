@@ -105,7 +105,7 @@ export interface SalesOrderListItem {
 }
 
 export interface CreateOrderItemPayload {
-  product_id: number
+  product_id: number | null
   ten_hang?: string
   so_luong: number
   don_gia: number

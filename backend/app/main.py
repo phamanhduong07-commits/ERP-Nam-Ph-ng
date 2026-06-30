@@ -57,6 +57,7 @@ from app.routers import ton_dau_ky as ton_dau_ky_router
 from app.routers import roll_reconcile as roll_reconcile_router
 from app.routers import production_sessions as production_sessions_router
 from app.routers import production_khau_costs as production_khau_costs_router
+from app.routers import tai_san_in as tai_san_in_router
 
 
 async def benefit_birthday_loop():
@@ -492,6 +493,7 @@ app.include_router(ton_dau_ky_router.router)
 app.include_router(roll_reconcile_router.router)
 app.include_router(production_sessions_router.router)
 app.include_router(production_khau_costs_router.router)
+app.include_router(tai_san_in_router.router)
 app.include_router(doi_tru_router.router, prefix="/api")
 app.include_router(tem_paper_prices_router.router, prefix="/api")
 app.include_router(offset_addon_prices_router.router, prefix="/api")

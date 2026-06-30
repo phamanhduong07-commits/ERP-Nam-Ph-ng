@@ -81,7 +81,7 @@ class PurchaseOrder(Base):
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), index=True)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), index=True)
     loai_po: Mapped[str] = mapped_column(String(20), default="chung")
-    # chung | giay_cuon | nvl_khac
+    # chung | giay_cuon | nvl_khac | ban_in_khuon_be
     ngay_du_kien_nhan: Mapped[date | None] = mapped_column(Date)
     dieu_khoan_tt: Mapped[str | None] = mapped_column(String(50))
     tong_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
