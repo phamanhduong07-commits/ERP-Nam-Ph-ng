@@ -21,6 +21,7 @@ class SalesOrder(Base):
     trang_thai: Mapped[str] = mapped_column(String(30), default="moi")
     ngay_giao_hang: Mapped[date | None] = mapped_column(Date)
     dia_chi_giao: Mapped[str | None] = mapped_column(Text)
+    dien_thoai_giao: Mapped[str | None] = mapped_column(String(50))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     tong_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ty_le_giam_gia: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)  # % giảm giá

@@ -513,6 +513,30 @@ def update_so_po_kh(
     return get_order(order_id, db, current_user)
 
 
+@router.patch("/{order_id}/giao-hang", response_model=SalesOrderResponse)
+def update_giao_hang(
+    order_id: int,
+    ngay_giao_hang: str | None = None,
+    dia_chi_giao: str | None = None,
+    dien_thoai_giao: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from datetime import datetime, timezone, date as date_type
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    if ngay_giao_hang is not None:
+        order.ngay_giao_hang = date_type.fromisoformat(ngay_giao_hang) if ngay_giao_hang else None
+    if dia_chi_giao is not None:
+        order.dia_chi_giao = dia_chi_giao or None
+    if dien_thoai_giao is not None:
+        order.dien_thoai_giao = dien_thoai_giao or None
+    order.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return get_order(order_id, db, current_user)
+
+
 @router.post("/admin/backfill-spec")
 def backfill_spec(
     db: Session = Depends(get_db),

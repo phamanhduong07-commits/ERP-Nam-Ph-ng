@@ -67,6 +67,9 @@ class TaoDonHangItemOverride(BaseModel):
 
 class TaoDonHangRequest(BaseModel):
     item_overrides: Optional[List[TaoDonHangItemOverride]] = None
+    ngay_giao_hang: Optional[date] = None
+    dia_chi_giao: Optional[str] = None
+    dien_thoai_giao: Optional[str] = None
 
 
 QUOTE_IMPORT_FIELDS = [
@@ -1227,6 +1230,9 @@ def tao_don_hang_tu_bao_gia(
         phan_xuong_id=quote.phan_xuong_id,
         nv_kinh_doanh_id=quote.nv_phu_trach_id,
         trang_thai="moi",
+        ngay_giao_hang=body.ngay_giao_hang,
+        dia_chi_giao=body.dia_chi_giao or None,
+        dien_thoai_giao=body.dien_thoai_giao or None,
         ghi_chu=f"Lập từ báo giá {quote.so_bao_gia}",
         created_by=current_user.id,
     )

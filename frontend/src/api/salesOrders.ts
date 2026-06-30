@@ -72,6 +72,7 @@ export interface SalesOrder {
   trang_thai: string
   ngay_giao_hang: string | null
   dia_chi_giao: string | null
+  dien_thoai_giao: string | null
   ghi_chu: string | null
   tong_tien: number
   ty_le_giam_gia: number
@@ -171,6 +172,8 @@ export const salesOrdersApi = {
     client.put<SalesOrder>(`/sales-orders/${id}`, data),
   updateSoPoKh: (id: number, so_po_kh: string | null) =>
     client.patch<SalesOrder>(`/sales-orders/${id}/so-po-kh`, null, { params: { so_po_kh: so_po_kh ?? '' } }),
+  updateGiaoHang: (id: number, data: { ngay_giao_hang?: string | null; dia_chi_giao?: string | null; dien_thoai_giao?: string | null }) =>
+    client.patch<SalesOrder>(`/sales-orders/${id}/giao-hang`, null, { params: data }),
   updateDiscount: (id: number, data: { ty_le_giam_gia?: number; so_tien_giam_gia?: number; ghi_chu?: string }) =>
     client.patch<SalesOrder>(`/sales-orders/${id}/update-discount`, data),
   approve: (id: number) => client.patch<SalesOrder>(`/sales-orders/${id}/approve`),

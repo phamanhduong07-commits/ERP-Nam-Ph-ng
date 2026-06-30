@@ -152,6 +152,7 @@ class SalesOrderResponse(BaseModel):
     trang_thai: str
     ngay_giao_hang: date | None
     dia_chi_giao: str | None
+    dien_thoai_giao: str | None = None
     ghi_chu: str | None
     tong_tien: Decimal
     ty_le_giam_gia: Decimal

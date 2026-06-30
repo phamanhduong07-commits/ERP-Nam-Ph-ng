@@ -28,7 +28,7 @@ import QuoteToolbar from './components/QuoteToolbar'
 import QuoteHeaderForm from './components/QuoteHeaderForm'
 import QuoteItemEditor from './components/QuoteItemEditor'
 import QuoteItemsTable from './components/QuoteItemsTable'
-import TaoDonHangModal from './components/TaoDonHangModal'
+import TaoDonHangModal, { type TaoDonHangResult } from './components/TaoDonHangModal'
 
 const { Text } = Typography
 
@@ -275,8 +275,8 @@ export default function QuoteForm() {
   })
 
   const taoDonMutation = useMutation({
-    mutationFn: (overrides: { id: number; so_luong: number }[]) =>
-      quotesApi.taoDonHang(Number(id), overrides),
+    mutationFn: ({ items, ngay_giao_hang, dia_chi_giao, dien_thoai_giao }: TaoDonHangResult) =>
+      quotesApi.taoDonHang(Number(id), items, { ngay_giao_hang, dia_chi_giao, dien_thoai_giao }),
     onSuccess: (res) => {
       message.success(`Đã tạo đơn hàng ${res.data.so_don}`)
       setSelectItemsModal(false)
@@ -837,7 +837,7 @@ export default function QuoteForm() {
         items={items}
         loading={taoDonMutation.isPending}
         onCancel={() => setSelectItemsModal(false)}
-        onOk={(overrides) => taoDonMutation.mutate(overrides)}
+        onOk={(result) => taoDonMutation.mutate(result)}
       />
     </div>
   )

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Space, Button, Typography,
   Divider, Popconfirm, message, Skeleton, Row, Col, Modal, DatePicker, Form, Select,
-  Drawer, Tooltip, Alert, Dropdown,
+  Drawer, Tooltip, Alert, Dropdown, Popover,
 } from 'antd'
 import type { MenuProps } from 'antd'
 import {
@@ -46,6 +46,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   const qc = useQueryClient()
   const [lenhModal, setLenhModal] = useState(false)
   const [lenhLoading, setLenhLoading] = useState(false)
+  const [ngayGiaoOpen, setNgayGiaoOpen] = useState(false)
   const [lenhForm] = Form.useForm()
   const [bomItemId, setBomItemId] = useState<number | null>(null)
   const [previewItem, setPreviewItem] = useState<SalesOrderItem | null>(null)
@@ -137,6 +138,16 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sales-order', id] })
       message.success('Đã cập nhật Số PO KH')
+    },
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Cập nhật thất bại')),
+  })
+
+  const updateGiaoHangMutation = useMutation({
+    mutationFn: (data: { ngay_giao_hang?: string | null; dia_chi_giao?: string | null; dien_thoai_giao?: string | null }) =>
+      salesOrdersApi.updateGiaoHang(Number(id), data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales-order', id] })
+      message.success('Đã cập nhật')
     },
     onError: (e: unknown) => message.error(apiErrorMsg(e, 'Cập nhật thất bại')),
   })
@@ -621,14 +632,42 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             {dayjs(order.ngay_don).format('DD/MM/YYYY')}
           </Descriptions.Item>
           <Descriptions.Item label="Ngày giao hàng">
-            {order.ngay_giao_hang ? dayjs(order.ngay_giao_hang).format('DD/MM/YYYY') : '—'}
+            <Popover
+              open={ngayGiaoOpen}
+              onOpenChange={setNgayGiaoOpen}
+              trigger="click"
+              content={
+                <DatePicker
+                  format="DD/MM/YYYY"
+                  defaultValue={order.ngay_giao_hang ? dayjs(order.ngay_giao_hang) : undefined}
+                  onChange={(date) => {
+                    updateGiaoHangMutation.mutate({ ngay_giao_hang: date ? date.format('YYYY-MM-DD') : null })
+                    setNgayGiaoOpen(false)
+                  }}
+                  allowClear
+                  autoFocus
+                />
+              }
+            >
+              <Text style={{ cursor: 'pointer', color: order.ngay_giao_hang ? undefined : '#bfbfbf' }}>
+                {order.ngay_giao_hang ? dayjs(order.ngay_giao_hang).format('DD/MM/YYYY') : '— nhấn để đặt'}
+              </Text>
+            </Popover>
           </Descriptions.Item>
           <Descriptions.Item label="Khách hàng" span={2}>
             <Text strong>{order.customer?.ten_viet_tat}</Text>
             {order.customer?.ten_don_vi && <Text type="secondary"> — {order.customer.ten_don_vi}</Text>}
           </Descriptions.Item>
           <Descriptions.Item label="Điện thoại">
-            {order.customer?.dien_thoai || '—'}
+            <Text
+              editable={{
+                tooltip: 'Nhấn để sửa số điện thoại giao hàng',
+                text: order.dien_thoai_giao ?? '',
+                onChange: (val) => updateGiaoHangMutation.mutate({ dien_thoai_giao: val || null }),
+              }}
+            >
+              {order.dien_thoai_giao || order.customer?.dien_thoai || '—'}
+            </Text>
           </Descriptions.Item>
           <Descriptions.Item label="Pháp nhân">
             {order.ten_phap_nhan || <Text type="secondary">—</Text>}
@@ -639,7 +678,15 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               : <Text type="secondary">—</Text>}
           </Descriptions.Item>
           <Descriptions.Item label="Địa chỉ giao hàng" span={3}>
-            {order.dia_chi_giao || '—'}
+            <Text
+              editable={{
+                tooltip: 'Nhấn để sửa địa chỉ giao hàng',
+                text: order.dia_chi_giao ?? '',
+                onChange: (val) => updateGiaoHangMutation.mutate({ dia_chi_giao: val || null }),
+              }}
+            >
+              {order.dia_chi_giao || '—'}
+            </Text>
           </Descriptions.Item>
           {order.created_by_name && (
             <Descriptions.Item label="Người lập">{order.created_by_name}</Descriptions.Item>

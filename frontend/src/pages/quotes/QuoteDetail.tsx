@@ -14,7 +14,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType, buildPaperSymbol } from '../../api/quotes'
 import type { Quote, QuoteItem } from '../../api/quotes'
-import TaoDonHangModal from './components/TaoDonHangModal'
+import TaoDonHangModal, { type TaoDonHangResult } from './components/TaoDonHangModal'
 import { printDocument, buildDocumentHtml, downloadAsPdf } from '../../utils/exportUtils'
 import type { PrintDocumentOptions } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
@@ -490,8 +490,8 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   })
 
   const taoDonHangMutation = useMutation({
-    mutationFn: (overrides: { id: number; so_luong: number }[]) =>
-      quotesApi.taoDonHang(Number(id), overrides),
+    mutationFn: ({ items, ngay_giao_hang, dia_chi_giao, dien_thoai_giao }: TaoDonHangResult) =>
+      quotesApi.taoDonHang(Number(id), items, { ngay_giao_hang, dia_chi_giao, dien_thoai_giao }),
     onSuccess: (res) => {
       message.success(`Đã tạo đơn hàng ${res.data.so_don}`)
       setTaoDonModal(false)
@@ -975,7 +975,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
         items={quote.items}
         loading={taoDonHangMutation.isPending}
         onCancel={() => setTaoDonModal(false)}
-        onOk={(overrides) => taoDonHangMutation.mutate(overrides)}
+        onOk={(result) => taoDonHangMutation.mutate(result)}
       />
 
       <Modal

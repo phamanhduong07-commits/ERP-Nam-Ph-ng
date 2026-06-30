@@ -787,69 +787,62 @@ HOP_AM_DUONG_NAP (nắp — lớn hơn thân 1 cm mỗi chiều):
     id: 'calc-6',
     category: '📐 Kỹ Thuật Tính Giá',
     title: '7. Khay Die-cut: 4 Loại & Hệ Số Đặc Biệt',
-    content: `<p>Khay (tray) thường có thành thấp hơn hộp, không có nắp. Trong hệ thống Nam Phương có 4 loại khay die-cut, mỗi loại có 1–2 điểm đặc biệt cần nắm.</p>
+    content: `<p>Khay không có nắp, thành thấp hơn hộp. 4 loại khay die-cut trong hệ thống Nam Phương — ví dụ thống nhất dùng D=50, R=30, C=10 để dễ so sánh.</p>
 
-<h2>Bảng Tổng Hợp 4 Loại Khay</h2>
-<table style="width:100%;border-collapse:collapse;margin:10px 0;">
-  <tr style="background:#e6f0ff;">
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">Loại</th>
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">kho_kh</th>
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">dai_kh</th>
-    <th style="border:1px solid #b0c4de;padding:8px 12px;">Điểm đặc biệt</th>
-  </tr>
-  <tr>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>KHAY_1_THANH</strong></td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">2C + R + 7</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + D + 5</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Cơ bản nhất</td>
-  </tr>
-  <tr style="background:#fafafa;">
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>KHAY_2_THANH</strong></td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + R + 5</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">4C + D + 7</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">+1 thành → kho và dai đều tăng C</td>
-  </tr>
-  <tr>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>KHAY_1_THANH_CHAU</strong></td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>(8/3)C</strong> + R + 9</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">3C + D + 5</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">Hệ số C = 8/3 ≈ 2.667 (vách xiên)</td>
-  </tr>
-  <tr style="background:#fff8e6;">
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>KHAY_NUOC_GK</strong></td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>D</strong> + 2C + 5</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;"><strong>R</strong> + 2C + 5</td>
-    <td style="border:1px solid #d0d0d0;padding:7px 12px;">D và R ĐẢO VỊ TRÍ so với khay khác</td>
-  </tr>
-</table>
-
-<h2>Phân Tích Chi Tiết</h2>
-
-<h3>KHAY_1_THANH vs KHAY_2_THANH</h3>
-<p>Thêm 1 thành bên làm cả kho_kh lẫn dai_kh tăng thêm C:</p>
-<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">KHAY_1_THANH:  kho = 2C+R+7,   dai = 3C+D+5
-KHAY_2_THANH:  kho = 3C+R+5,   dai = 4C+D+7
-                      ↑ +C               ↑ +C</pre>
-<p>Ví dụ D=50, R=30, C=10: KHAY_1 → DT ≈ 0.29 m², KHAY_2 → DT ≈ 0.42 m². Thêm 1 thành tốn thêm ~45% giấy.</p>
-
-<h3>KHAY_1_THANH_CHAU — Tại Sao Hệ Số 8/3?</h3>
-<p>Khay châu có vách bên bị vát xiên (không thẳng 90°). Độ vát làm chiều giấy thực tế dài hơn chiều Cao C. Hệ số chuẩn = 8/3 ≈ 2.667 (so với KHAY_1_THANH dùng hệ số 2).</p>
-
-<h3>KHAY_NUOC_GK — Đảo D và R</h3>
-<pre style="background:#fff8e6;border:1px solid #f0b030;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">KHAY_NUOC_GK:  kho_kh = D + 2C + 5  (D theo trục kho)
-               dai_kh = R + 2C + 5  (R theo trục dai)
-
-Mọi loại khác: kho_kh phụ thuộc R → KHAY_NUOC_GK: kho phụ thuộc D</pre>
-
-<div class="doc-alert doc-warning">
-  <strong>Lỗi thường gặp nhất với Khay:</strong> Nhầm KHAY_1_THANH_CHAU với KHAY_1_THANH khi khách mô tả "khay có vách vát". Hỏi thêm: vách thẳng hay xiên? DT khay vách xiên lớn hơn ~20–30% so với khay vách thẳng cùng kích thước.
+<h2>KHAY_1_THANH — Khay 1 Thành Cơ Bản</h2>
+<p>Loại khay đơn giản nhất: 4 vách đứng thẳng 90°, không vát. Dùng phổ biến cho hàng nông sản, trái cây, thực phẩm.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 2C + R + 7     ← 2×C theo ngang (đáy + 1 thành bên)
+dai_kh = 3C + D + 5     ← 3×C theo dọc (đáy + 2 thành đầu)</pre>
+<div class="doc-alert doc-tip">
+  <strong>Ví dụ KHAY_1_THANH — D=50, R=30, C=10:</strong><br/>
+  kho_kh = 2×10 + 30 + 7 = <strong>57 cm</strong><br/>
+  dai_kh = 3×10 + 50 + 5 = <strong>85 cm</strong><br/>
+  DT = 57 × 85 / 10.000 = <strong>0.485 m²/cái</strong>
 </div>
 
+<h2>KHAY_2_THANH — Khay 2 Thành</h2>
+<p>Thêm 1 thành bên so với KHAY_1_THANH → kho_kh tăng thêm C, dai_kh tăng thêm C. Phù hợp hàng nặng hoặc cần thành cao 2 phía.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = 3C + R + 5     ← 3×C (tăng thêm C so với KHAY_1_THANH)
+dai_kh = 4C + D + 7     ← 4×C (tăng thêm C so với KHAY_1_THANH)
+
+So sánh nhanh:
+  KHAY_1_THANH:  2C+R+7  /  3C+D+5
+  KHAY_2_THANH:  3C+R+5  /  4C+D+7   ← mỗi chiều +C</pre>
 <div class="doc-alert doc-tip">
-  <strong>Ví dụ nhanh KHAY_1_THANH_CHAU — D=50, R=30, C=8:</strong><br/>
-  kho_kh = (8/3)×8 + 30 + 9 = 21.33 + 30 + 9 = 60.33 cm<br/>
-  dai_kh = 3×8 + 50 + 5 = 79 cm<br/>
-  DT = 60.33 × 79 / 10.000 = 0.476 m²/cái
+  <strong>Ví dụ KHAY_2_THANH — D=50, R=30, C=10:</strong><br/>
+  kho_kh = 3×10 + 30 + 5 = <strong>65 cm</strong><br/>
+  dai_kh = 4×10 + 50 + 7 = <strong>97 cm</strong><br/>
+  DT = 65 × 97 / 10.000 = <strong>0.631 m²/cái</strong> (lớn hơn KHAY_1_THANH 30%)
+</div>
+
+<h2>KHAY_1_THANH_CHAU — Khay Vách Xiên (Hệ Số 8/3)</h2>
+<p>Vách bên bị vát xiên ra ngoài (không thẳng 90°). Độ vát làm chiều giấy thực tế dài hơn chiều C — hệ số đặc biệt <strong>8/3 ≈ 2.667</strong> (KHAY_1_THANH dùng hệ số 2). Dai_kh giống KHAY_1_THANH.</p>
+<pre style="background:#f6f8fa;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = (8/3)×C + R + 9    ← 8/3 ≈ 2.667 (KHÔNG phải 2C hay 3C)
+dai_kh = 3C + D + 5         ← giống KHAY_1_THANH</pre>
+<p><strong>Vì sao 8/3?</strong> Vách xiên góc vát tiêu chuẩn → chiều giấy thực = 8/3 lần chiều cao C đứng. Con số 8/3 là hệ số được đo từ thực tế sản xuất, không tính toán lý thuyết được.</p>
+<div class="doc-alert doc-tip">
+  <strong>Ví dụ KHAY_1_THANH_CHAU — D=50, R=30, C=10:</strong><br/>
+  kho_kh = (8/3)×10 + 30 + 9 = 26.67 + 30 + 9 = <strong>65.67 cm</strong><br/>
+  dai_kh = 3×10 + 50 + 5 = <strong>85 cm</strong><br/>
+  DT = 65.67 × 85 / 10.000 = <strong>0.558 m²/cái</strong> (lớn hơn KHAY_1_THANH thẳng 15%)
+</div>
+<div class="doc-alert doc-warning">
+  <strong>Lỗi thường gặp:</strong> Khách mô tả "khay có vách vát" → hỏi rõ vách thẳng hay xiên trước khi chọn loại. DT khay vách xiên lớn hơn ~15–30% so với khay vách thẳng cùng kích thước.
+</div>
+
+<h2>KHAY_NUOC_GK — D và R Đảo Vị Trí</h2>
+<p>Loại duy nhất trong nhóm khay có D chạy theo trục kho, R chạy theo trục dai — ngược hoàn toàn với 3 loại khay còn lại và ngược với thùng thường.</p>
+<pre style="background:#fff8e6;border:1px solid #f0b030;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;line-height:1.9;">kho_kh = D + 2C + 5     ← D theo trục kho (đảo ngược!)
+dai_kh = R + 2C + 5     ← R theo trục dai
+
+3 khay kia: kho_kh phụ thuộc R
+KHAY_NUOC_GK: kho_kh phụ thuộc D</pre>
+<p><strong>Cách kiểm tra không nhầm:</strong> Với hộp D &gt; R, nếu kho_kh &gt; dai_kh → đúng (D vào kho). Nếu dai_kh &gt; kho_kh khi D &gt; R → đang nhập sai loại khay.</p>
+<div class="doc-alert doc-tip">
+  <strong>Ví dụ KHAY_NUOC_GK — D=50, R=30, C=10:</strong><br/>
+  kho_kh = 50 + 2×10 + 5 = <strong>75 cm</strong> (D theo kho)<br/>
+  dai_kh = 30 + 2×10 + 5 = <strong>55 cm</strong> (R theo dai)<br/>
+  DT = 75 × 55 / 10.000 = <strong>0.413 m²/cái</strong>
 </div>`
   },
 

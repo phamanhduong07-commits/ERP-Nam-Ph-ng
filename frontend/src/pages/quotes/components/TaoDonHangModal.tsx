@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Modal, Table, Space, Button, InputNumber, Typography } from 'antd'
+import { Modal, Table, Space, Button, InputNumber, Typography, DatePicker, Input, Form } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { QuoteItem } from '../../../api/quotes'
+import dayjs from 'dayjs'
 
 const { Text } = Typography
 
@@ -16,17 +17,27 @@ interface ItemRow {
   gia_ban: number
 }
 
+export interface TaoDonHangResult {
+  items: { id: number; so_luong: number }[]
+  ngay_giao_hang: string | null
+  dia_chi_giao: string | null
+  dien_thoai_giao: string | null
+}
+
 interface Props {
   open: boolean
   items: QuoteItem[]
   loading: boolean
   onCancel: () => void
-  onOk: (overrides: { id: number; so_luong: number }[]) => void
+  onOk: (result: TaoDonHangResult) => void
 }
 
 export default function TaoDonHangModal({ open, items, loading, onCancel, onOk }: Props) {
   const [rows, setRows] = useState<ItemRow[]>([])
   const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [ngayGiao, setNgayGiao] = useState<dayjs.Dayjs | null>(null)
+  const [diaChiGiao, setDiaChiGiao] = useState('')
+  const [dienThoaiGiao, setDienThoaiGiao] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -44,6 +55,9 @@ export default function TaoDonHangModal({ open, items, loading, onCancel, onOk }
       }))
     setRows(initial)
     setSelectedIds(initial.map(r => r.id))
+    setNgayGiao(null)
+    setDiaChiGiao('')
+    setDienThoaiGiao('')
   }, [open, items])
 
   const updateSoLuong = (id: number, val: number) => {
@@ -51,10 +65,15 @@ export default function TaoDonHangModal({ open, items, loading, onCancel, onOk }
   }
 
   const handleOk = () => {
-    const overrides = rows
+    const selectedItems = rows
       .filter(r => selectedIds.includes(r.id))
       .map(r => ({ id: r.id, so_luong: r.so_luong }))
-    onOk(overrides)
+    onOk({
+      items: selectedItems,
+      ngay_giao_hang: ngayGiao ? ngayGiao.format('YYYY-MM-DD') : null,
+      dia_chi_giao: diaChiGiao.trim() || null,
+      dien_thoai_giao: dienThoaiGiao.trim() || null,
+    })
   }
 
   const columns: ColumnsType<ItemRow> = [
@@ -132,6 +151,33 @@ export default function TaoDonHangModal({ open, items, loading, onCancel, onOk }
         }}
         columns={columns}
       />
+      <Form layout="vertical" style={{ marginTop: 16 }} size="small">
+        <Form.Item label="Ngày giao hàng" style={{ marginBottom: 8 }}>
+          <DatePicker
+            format="DD/MM/YYYY"
+            value={ngayGiao}
+            onChange={setNgayGiao}
+            style={{ width: '100%' }}
+            placeholder="Chọn ngày giao (tuỳ chọn)"
+          />
+        </Form.Item>
+        <Form.Item label="Điện thoại giao hàng" style={{ marginBottom: 8 }}>
+          <Input
+            value={dienThoaiGiao}
+            onChange={e => setDienThoaiGiao(e.target.value)}
+            placeholder="Số điện thoại liên hệ giao hàng (tuỳ chọn)"
+            allowClear
+          />
+        </Form.Item>
+        <Form.Item label="Địa chỉ giao hàng" style={{ marginBottom: 0 }}>
+          <Input
+            value={diaChiGiao}
+            onChange={e => setDiaChiGiao(e.target.value)}
+            placeholder="Địa chỉ giao hàng (tuỳ chọn)"
+            allowClear
+          />
+        </Form.Item>
+      </Form>
     </Modal>
   )
 }
