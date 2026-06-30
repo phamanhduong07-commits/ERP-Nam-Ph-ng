@@ -173,6 +173,8 @@ export default function ProductList() {
       so_mau: vals.so_mau ?? 0,
       dvt: vals.dvt || 'Cái',
       gia_ban: vals.gia_ban ?? 0,
+      gia_mua: editing?.gia_mua ?? 0,
+      gia_dinh_muc: editing?.gia_dinh_muc ?? 0,
       ghim: vals.ghim ?? false,
       dan: vals.dan ?? false,
       loai_in: vals.loai_in ?? 0,
