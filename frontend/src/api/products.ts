@@ -55,6 +55,8 @@ export interface ProductFull extends Product {
   to_hop_song: string | null
   loai_be: string | null
   be_hai_manh: boolean
+  ho_nap: boolean
+  ho_day: boolean
   co_be: boolean
   be_lo: boolean
   do_kho: boolean

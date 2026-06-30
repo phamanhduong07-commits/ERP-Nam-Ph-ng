@@ -135,7 +135,7 @@ export default function ProductList() {
       be_so_con: 0,
       can_mang: 0,
       khong_tinh_nxt: false,
-      be_hai_manh: false, co_be: false, be_lo: false, do_kho: false, do_phu: false,
+      be_hai_manh: false, ho_nap: false, ho_day: false, co_be: false, be_lo: false, do_kho: false, do_phu: false,
       co_tem_offset: false,
       tem_sp_per_to: 1, tem_waste_to: 0, tem_so_mau: 0,
       tem_co_can_mang: false, tem_co_khuon_be: false, tem_co_uv: false,
@@ -200,6 +200,8 @@ export default function ProductList() {
       to_hop_song: vals.to_hop_song ?? null,
       loai_be: vals.loai_be ?? null,
       be_hai_manh: vals.be_hai_manh ?? false,
+      ho_nap: vals.ho_nap ?? false,
+      ho_day: vals.ho_day ?? false,
       co_be: vals.co_be ?? false,
       be_lo: vals.be_lo ?? false,
       do_kho: vals.do_kho ?? false,
@@ -553,6 +555,8 @@ export default function ProductList() {
 
                   <Row gutter={12}>
                     <Col span={4}><Form.Item label="Bế 2 mảnh" name="be_hai_manh" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Hở nắp" name="ho_nap" valuePropName="checked"><Switch /></Form.Item></Col>
+                    <Col span={4}><Form.Item label="Hở đáy" name="ho_day" valuePropName="checked"><Switch /></Form.Item></Col>
                     <Col span={4}><Form.Item label="Có bế" name="co_be" valuePropName="checked"><Switch /></Form.Item></Col>
                     <Col span={4}><Form.Item label="Bế lỗ" name="be_lo" valuePropName="checked"><Switch /></Form.Item></Col>
                     <Col span={4}><Form.Item label="Độ khô" name="do_kho" valuePropName="checked"><Switch /></Form.Item></Col>
