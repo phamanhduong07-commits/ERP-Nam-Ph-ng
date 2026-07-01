@@ -13,6 +13,9 @@ export interface YMHItem {
   loai_item?: string
   san_pham_id?: number | null
   ten_san_pham?: string | null
+  tai_san_in_id?: number | null
+  supplier_id_goi_y?: number | null
+  ten_ncc_goi_y?: string | null
 }
 
 export interface ToolingRecord {
@@ -57,6 +60,14 @@ export interface PurchaseRequisition {
   ngay_duyet_gd: string | null
   po_id: number | null
   so_po_linked: string | null
+  pos: {
+    po_id: number
+    so_po: string
+    supplier_id: number
+    ten_ncc: string | null
+    tong_tien: number
+    trang_thai: string
+  }[]
   ghi_chu: string | null
   ly_do_tu_choi: string | null
   tong_du_kien: number
@@ -92,6 +103,20 @@ export interface TaoPoPayload {
   dieu_khoan_tt?: string | null
   ghi_chu?: string | null
   items_override?: { ymh_item_id: number; don_gia: number }[]
+}
+
+export interface NccGroup {
+  supplier_id: number
+  item_ids: number[]
+  don_gia_overrides?: { ymh_item_id: number; don_gia: number }[]
+}
+
+export interface TaoPOTheoNCCPayload {
+  ngay_po: string
+  ngay_du_kien_nhan?: string | null
+  dieu_khoan_tt?: string | null
+  ghi_chu?: string | null
+  groups: NccGroup[]
 }
 
 export const TRANG_THAI_YMH: Record<string, string> = {
@@ -150,6 +175,12 @@ export const ymhApi = {
   taoPO: (id: number, data: TaoPoPayload) =>
     client.post<{ ok: boolean; po_id: number; so_po: string; trang_thai: string }>(
       `/purchase-requisitions/${id}/tao-po`,
+      data,
+    ),
+
+  taoPOTheoNCC: (id: number, data: TaoPOTheoNCCPayload) =>
+    client.post<{ ok: boolean; pos: { po_id: number; so_po: string; supplier_id: number; item_count: number }[] }>(
+      `/purchase-requisitions/${id}/tao-po-theo-ncc`,
       data,
     ),
 

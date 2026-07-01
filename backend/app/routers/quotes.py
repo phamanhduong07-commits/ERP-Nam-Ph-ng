@@ -17,6 +17,7 @@ from app.deps import get_current_user, require_permissions, assert_has_permissio
 from app.models.auth import User
 from app.models.master import Customer, PhanXuong, PaperMaterial
 from app.models.sales import Quote, QuoteItem, SalesOrder, SalesOrderItem
+from app.models.tai_san_in import TaiSanIn
 from app.models.system import PrintTemplate, SystemSetting
 from app.schemas.master import CustomerShort
 from app.schemas.quotes import (
@@ -1275,6 +1276,9 @@ def tao_don_hang_tu_bao_gia(
             order.items.append(item)
             tong_tien += so_luong * qi.gia_ban
 
+        tong_tien += (Decimal(str(quote.chi_phi_bang_in or 0))
+                      + Decimal(str(quote.chi_phi_khuon or 0))
+                      + Decimal(str(quote.chi_phi_van_chuyen or 0)))
         order.tong_tien = tong_tien
         db.add(order)
         db.commit()
@@ -1283,6 +1287,28 @@ def tao_don_hang_tu_bao_gia(
         err = str(e)
         raise HTTPException(status_code=500, detail=f"Lỗi tạo đơn hàng: {err}")
     db.refresh(order)
+
+    # Auto-tạo TaiSanIn khi báo giá có chi phí bản in / khuôn bế
+    def _next_ma_ts(loai: str) -> str:
+        prefix = "BSI" if loai == "ban_in" else "KBE"
+        year = date.today().year
+        last = (db.query(TaiSanIn)
+                .filter(TaiSanIn.ma_tai_san.like(f"{prefix}-{year}-%"))
+                .order_by(TaiSanIn.id.desc()).first())
+        seq = int(last.ma_tai_san.split("-")[-1]) + 1 if last else 1
+        return f"{prefix}-{year}-{seq:03d}"
+
+    for loai, gia_tri in [("ban_in", quote.chi_phi_bang_in), ("khuon_be", quote.chi_phi_khuon)]:
+        if gia_tri and gia_tri > 0:
+            db.add(TaiSanIn(
+                ma_tai_san=_next_ma_ts(loai),
+                loai=loai, gia_tri=gia_tri,
+                customer_id=order.customer_id, sales_order_thu_id=order.id,
+                trang_thai='cho_mua', nguoi_chi_tra='khach_hang',
+                user_id=current_user.id, ngay_tao=date.today(),
+            ))
+            db.commit()
+
     return {
         "so_don": order.so_don,
         "order_id": order.id,

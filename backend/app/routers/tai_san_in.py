@@ -176,6 +176,7 @@ def tao_ymh_tu_tai_san_in(
 def list_tai_san_in(
     loai: str | None = Query(None),
     customer_id: int | None = Query(None),
+    sales_order_thu_id: int | None = Query(None),
     trang_thai: str | None = Query(None),
     nguoi_chi_tra: str | None = Query(None),
     chua_thu_tien: bool | None = Query(None),
@@ -196,6 +197,8 @@ def list_tai_san_in(
         q = q.filter(TaiSanIn.loai == loai)
     if customer_id:
         q = q.filter(TaiSanIn.customer_id == customer_id)
+    if sales_order_thu_id:
+        q = q.filter(TaiSanIn.sales_order_thu_id == sales_order_thu_id)
     if trang_thai:
         q = q.filter(TaiSanIn.trang_thai == trang_thai)
     if nguoi_chi_tra:

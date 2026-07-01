@@ -220,7 +220,7 @@ def update_other_material(
 @router.get("/search")
 def search_other_materials(
     q: str = Query(default=""),
-    limit: int = Query(default=20, le=50),
+    limit: int = Query(default=20, le=1000),
     ma_nhom_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),

@@ -117,6 +117,7 @@ export const taiSanInApi = {
   list: (params?: {
     loai?: TaiSanLoai
     customer_id?: number
+    sales_order_thu_id?: number
     trang_thai?: TaiSanTrangThai
     nguoi_chi_tra?: TaiSanNguoiChiTra
     chua_thu_tien?: boolean

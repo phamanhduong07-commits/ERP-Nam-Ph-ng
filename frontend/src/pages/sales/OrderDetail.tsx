@@ -84,16 +84,16 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
 
   const { data: tsiList = [] } = useQuery({
-    queryKey: ['tai-san-in-by-order', order?.customer_id],
-    queryFn: () => taiSanInApi.list({ customer_id: order!.customer_id }).then(r => r.data),
-    enabled: !!order?.customer_id,
+    queryKey: ['tai-san-in-by-order', order?.id],
+    queryFn: () => taiSanInApi.list({ sales_order_thu_id: order!.id }).then(r => r.data),
+    enabled: !!order?.id,
     staleTime: 30_000,
   })
 
   const tsiCreateMut = useMutation({
     mutationFn: (data: Parameters<typeof taiSanInApi.create>[0]) => taiSanInApi.create(data),
     onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['tai-san-in-by-order', order?.customer_id] })
+      qc.invalidateQueries({ queryKey: ['tai-san-in-by-order', order?.id] })
       setTsiCreateOpen(false)
       tsiForm.resetFields()
       message.success('Đã tạo bản in / khuôn bế')
@@ -452,8 +452,13 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   if (!order) return <Text type="secondary" style={{ padding: 24, display: 'block' }}>Không tìm thấy đơn hàng</Text>
 
   const tongTienHang = order.items.reduce((s, i) => s + Number(i.thanh_tien), 0)
+  const chiBangIn = Number(order.chi_phi_bang_in || 0)
+  const chiKhuon = Number(order.chi_phi_khuon || 0)
+  const chiVanChuyen = Number(order.chi_phi_van_chuyen || 0)
+  const hasChiPhi = chiBangIn > 0 || chiKhuon > 0 || chiVanChuyen > 0
   const hasDiscount = Number(order.ty_le_giam_gia) > 0 || Number(order.so_tien_giam_gia) > 0
   const tongSauGiam = Number(order.tong_tien_sau_giam)
+  const tongTruocGiam = Number(order.tong_tien)
 
   return (
     <div>
@@ -778,6 +783,39 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={2} colSpan={4} />
               </Table.Summary.Row>
+              {chiBangIn > 0 && (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={9} align="right">
+                    <Text type="secondary">Chi phí bản in:</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Text>{fmtVND(chiBangIn)} đ</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} colSpan={4} />
+                </Table.Summary.Row>
+              )}
+              {chiKhuon > 0 && (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={9} align="right">
+                    <Text type="secondary">Chi phí khuôn bế:</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Text>{fmtVND(chiKhuon)} đ</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} colSpan={4} />
+                </Table.Summary.Row>
+              )}
+              {chiVanChuyen > 0 && (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={9} align="right">
+                    <Text type="secondary">Chi phí vận chuyển:</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Text>{fmtVND(chiVanChuyen)} đ</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} colSpan={4} />
+                </Table.Summary.Row>
+              )}
               {hasDiscount && (
                 <Table.Summary.Row>
                   <Table.Summary.Cell index={0} colSpan={9} align="right">
@@ -787,13 +825,13 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={1} align="right">
                     <Text type="danger">
-                      -{fmtVND(tongTienHang - tongSauGiam)} đ
+                      -{fmtVND(tongTruocGiam - tongSauGiam)} đ
                     </Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={2} colSpan={4} />
                 </Table.Summary.Row>
               )}
-              {hasDiscount && (
+              {(hasDiscount || hasChiPhi) ? (
                 <Table.Summary.Row>
                   <Table.Summary.Cell index={0} colSpan={9} align="right">
                     <Text strong>Tổng cộng:</Text>
@@ -805,8 +843,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={2} colSpan={4} />
                 </Table.Summary.Row>
-              )}
-              {!hasDiscount && (
+              ) : (
                 <Table.Summary.Row>
                   <Table.Summary.Cell index={0} colSpan={9} />
                   <Table.Summary.Cell index={1} align="right">

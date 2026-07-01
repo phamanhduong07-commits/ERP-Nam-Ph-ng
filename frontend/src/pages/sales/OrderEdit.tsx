@@ -6,8 +6,8 @@ import {
   InputNumber, Typography, Row, Col, Divider, message, Skeleton, Tag, Tooltip,
 } from 'antd'
 import {
-  PlusOutlined, DeleteOutlined, ArrowLeftOutlined,
-  CarOutlined, SettingOutlined,
+  DeleteOutlined, ArrowLeftOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -41,21 +41,11 @@ interface OrderLine {
   spec: OrderItemSpec
 }
 
-interface ExtraLine {
-  key: string
-  id: number | null
-  ten_hang: string
-  dvt: string
-  don_gia: number
-  ghi_chu: string
-}
-
 export default function OrderEdit() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [lines, setLines] = useState<OrderLine[]>([])
-  const [extraLines, setExtraLines] = useState<ExtraLine[]>([])
   const [saving, setSaving] = useState(false)
   const [productSearch, setProductSearch] = useState('')
   const [initialized, setInitialized] = useState(false)
@@ -115,79 +105,67 @@ export default function OrderEdit() {
     })
 
     const newLines: OrderLine[] = []
-    const newExtra: ExtraLine[] = []
 
     order.items.forEach((item) => {
-      if (item.product_id && item.product) {
-        newLines.push({
-          key: `line-${item.id}`,
-          id: item.id,
-          product_id: item.product_id,
-          product: {
-            id: item.product.id,
-            ma_amis: item.product.ma_amis,
-            ten_hang: item.ten_hang || item.product.ten_hang,
-            dai: item.product.dai,
-            rong: item.product.rong,
-            cao: item.product.cao,
-            so_lop: item.product.so_lop,
-            dvt: item.product.dvt,
-            gia_ban: item.product.gia_ban,
-          },
-          so_luong: Number(item.so_luong),
-          dvt: item.dvt,
-          don_gia: Number(item.don_gia),
-          ty_le_giam_gia: Number(item.ty_le_giam_gia) || 0,
-          so_tien_giam_gia: Number(item.so_tien_giam_gia) || 0,
-          ngay_giao_hang: item.ngay_giao_hang ?? null,
-          ghi_chu_san_pham: item.ghi_chu_san_pham ?? null,
-          yeu_cau_in: item.yeu_cau_in ?? null,
-          phan_xuong_id: item.phan_xuong_id ?? null,
-          spec: {
-            loai_thung: item.loai_thung ?? null,
-            dai: item.dai != null ? Number(item.dai) : null,
-            rong: item.rong != null ? Number(item.rong) : null,
-            cao: item.cao != null ? Number(item.cao) : null,
-            so_lop: item.so_lop ?? null,
-            to_hop_song: item.to_hop_song ?? null,
-            mat: item.mat ?? null,
-            mat_dl: item.mat_dl != null ? Number(item.mat_dl) : null,
-            song_1: item.song_1 ?? null,
-            song_1_dl: item.song_1_dl != null ? Number(item.song_1_dl) : null,
-            mat_1: item.mat_1 ?? null,
-            mat_1_dl: item.mat_1_dl != null ? Number(item.mat_1_dl) : null,
-            song_2: item.song_2 ?? null,
-            song_2_dl: item.song_2_dl != null ? Number(item.song_2_dl) : null,
-            mat_2: item.mat_2 ?? null,
-            mat_2_dl: item.mat_2_dl != null ? Number(item.mat_2_dl) : null,
-            song_3: item.song_3 ?? null,
-            song_3_dl: item.song_3_dl != null ? Number(item.song_3_dl) : null,
-            mat_3: item.mat_3 ?? null,
-            mat_3_dl: item.mat_3_dl != null ? Number(item.mat_3_dl) : null,
-            loai_in: item.loai_in ?? null,
-            so_mau: item.so_mau ?? null,
-            loai_lan: item.loai_lan ?? null,
-            c_tham: item.c_tham ?? null,
-            can_man: item.can_man ?? null,
-            kho_tt: item.kho_tt != null ? Number(item.kho_tt) : null,
-            dai_tt: item.dai_tt != null ? Number(item.dai_tt) : null,
-            dien_tich: item.dien_tich != null ? Number(item.dien_tich) : null,
-          },
-        })
-      } else {
-        newExtra.push({
-          key: `extra-${item.id}`,
-          id: item.id,
-          ten_hang: item.ten_hang || '',
-          dvt: item.dvt || 'lần',
-          don_gia: Number(item.don_gia),
-          ghi_chu: item.ghi_chu_san_pham ?? '',
-        })
-      }
+      if (!item.product_id || !item.product) return
+      newLines.push({
+        key: `line-${item.id}`,
+        id: item.id,
+        product_id: item.product_id,
+        product: {
+          id: item.product.id,
+          ma_amis: item.product.ma_amis,
+          ten_hang: item.ten_hang || item.product.ten_hang,
+          dai: item.product.dai,
+          rong: item.product.rong,
+          cao: item.product.cao,
+          so_lop: item.product.so_lop,
+          dvt: item.product.dvt,
+          gia_ban: item.product.gia_ban,
+        },
+        so_luong: Number(item.so_luong),
+        dvt: item.dvt,
+        don_gia: Number(item.don_gia),
+        ty_le_giam_gia: Number(item.ty_le_giam_gia) || 0,
+        so_tien_giam_gia: Number(item.so_tien_giam_gia) || 0,
+        ngay_giao_hang: item.ngay_giao_hang ?? null,
+        ghi_chu_san_pham: item.ghi_chu_san_pham ?? null,
+        yeu_cau_in: item.yeu_cau_in ?? null,
+        phan_xuong_id: item.phan_xuong_id ?? null,
+        spec: {
+          loai_thung: item.loai_thung ?? null,
+          dai: item.dai != null ? Number(item.dai) : null,
+          rong: item.rong != null ? Number(item.rong) : null,
+          cao: item.cao != null ? Number(item.cao) : null,
+          so_lop: item.so_lop ?? null,
+          to_hop_song: item.to_hop_song ?? null,
+          mat: item.mat ?? null,
+          mat_dl: item.mat_dl != null ? Number(item.mat_dl) : null,
+          song_1: item.song_1 ?? null,
+          song_1_dl: item.song_1_dl != null ? Number(item.song_1_dl) : null,
+          mat_1: item.mat_1 ?? null,
+          mat_1_dl: item.mat_1_dl != null ? Number(item.mat_1_dl) : null,
+          song_2: item.song_2 ?? null,
+          song_2_dl: item.song_2_dl != null ? Number(item.song_2_dl) : null,
+          mat_2: item.mat_2 ?? null,
+          mat_2_dl: item.mat_2_dl != null ? Number(item.mat_2_dl) : null,
+          song_3: item.song_3 ?? null,
+          song_3_dl: item.song_3_dl != null ? Number(item.song_3_dl) : null,
+          mat_3: item.mat_3 ?? null,
+          mat_3_dl: item.mat_3_dl != null ? Number(item.mat_3_dl) : null,
+          loai_in: item.loai_in ?? null,
+          so_mau: item.so_mau ?? null,
+          loai_lan: item.loai_lan ?? null,
+          c_tham: item.c_tham ?? null,
+          can_man: item.can_man ?? null,
+          kho_tt: item.kho_tt != null ? Number(item.kho_tt) : null,
+          dai_tt: item.dai_tt != null ? Number(item.dai_tt) : null,
+          dien_tich: item.dien_tich != null ? Number(item.dien_tich) : null,
+        },
+      })
     })
 
     setLines(newLines)
-    setExtraLines(newExtra)
     setInitialized(true)
   }, [order, form, initialized])
 
@@ -224,20 +202,6 @@ export default function OrderEdit() {
   const updateLine = (key: string, field: keyof OrderLine, value: unknown) =>
     setLines(prev => prev.map(l => l.key === key ? { ...l, [field]: value } : l))
 
-  const addExtraLine = (preset?: Partial<ExtraLine>) => {
-    setExtraLines(prev => [...prev, {
-      key: `extra-new-${Date.now()}`,
-      id: null,
-      ten_hang: preset?.ten_hang ?? '',
-      dvt: 'lần',
-      don_gia: preset?.don_gia ?? 0,
-      ghi_chu: '',
-    }])
-  }
-  const removeExtraLine = (key: string) => setExtraLines(prev => prev.filter(l => l.key !== key))
-  const updateExtraLine = (key: string, field: keyof ExtraLine, value: unknown) =>
-    setExtraLines(prev => prev.map(l => l.key === key ? { ...l, [field]: value } : l))
-
   const openSpecModal = (key: string) => {
     setSpecModalTarget(key)
     setSpecModalOpen(true)
@@ -254,12 +218,12 @@ export default function OrderEdit() {
     if (l.ty_le_giam_gia > 0) return s + base * (1 - l.ty_le_giam_gia / 100)
     if (l.so_tien_giam_gia > 0) return s + Math.max(0, base - l.so_tien_giam_gia)
     return s + base
-  }, 0) + extraLines.reduce((s, l) => s + l.don_gia, 0)
+  }, 0)
 
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
-      if (lines.length === 0 && extraLines.length === 0) {
+      if (lines.length === 0) {
         message.error('Vui lòng thêm ít nhất 1 sản phẩm')
         return
       }
@@ -283,34 +247,21 @@ export default function OrderEdit() {
         chi_phi_van_chuyen: values.chi_phi_van_chuyen || 0,
         ty_le_vat: values.ty_le_vat ?? 8,
         dieu_khoan: values.dieu_khoan || null,
-        items: [
-          ...lines.map(l => ({
-            id: l.id ?? undefined,
-            product_id: l.product_id,
-            ten_hang: l.product.ten_hang,
-            so_luong: l.so_luong,
-            don_gia: l.don_gia,
-            ty_le_giam_gia: l.ty_le_giam_gia,
-            so_tien_giam_gia: l.so_tien_giam_gia,
-            dvt: l.dvt || l.product.dvt,
-            ngay_giao_hang: l.ngay_giao_hang || undefined,
-            ghi_chu_san_pham: l.ghi_chu_san_pham || undefined,
-            yeu_cau_in: l.yeu_cau_in || undefined,
-            phan_xuong_id: l.phan_xuong_id || undefined,
-            ...l.spec,
-          })),
-          ...extraLines.map(l => ({
-            id: l.id ?? undefined,
-            product_id: null,
-            ten_hang: l.ten_hang || 'Dịch vụ',
-            so_luong: 1,
-            don_gia: l.don_gia,
-            ty_le_giam_gia: 0,
-            so_tien_giam_gia: 0,
-            dvt: l.dvt || 'lần',
-            ghi_chu_san_pham: l.ghi_chu || undefined,
-          })),
-        ],
+        items: lines.map(l => ({
+          id: l.id ?? undefined,
+          product_id: l.product_id,
+          ten_hang: l.product.ten_hang,
+          so_luong: l.so_luong,
+          don_gia: l.don_gia,
+          ty_le_giam_gia: l.ty_le_giam_gia,
+          so_tien_giam_gia: l.so_tien_giam_gia,
+          dvt: l.dvt || l.product.dvt,
+          ngay_giao_hang: l.ngay_giao_hang || undefined,
+          ghi_chu_san_pham: l.ghi_chu_san_pham || undefined,
+          yeu_cau_in: l.yeu_cau_in || undefined,
+          phan_xuong_id: l.phan_xuong_id || undefined,
+          ...l.spec,
+        })),
       }
       await salesOrdersApi.update(Number(id), payload as Parameters<typeof salesOrdersApi.update>[1])
       message.success('Đã cập nhật đơn hàng')
@@ -654,72 +605,6 @@ export default function OrderEdit() {
                 </Table.Summary>
               ) : null}
             />
-
-            {extraLines.length > 0 && (
-              <>
-                <Divider orientation="left" style={{ fontSize: 13, color: '#888', margin: '12px 0 8px' }}>
-                  Phí / Dịch vụ
-                </Divider>
-                <Table
-                  dataSource={extraLines}
-                  rowKey="key"
-                  pagination={false}
-                  size="small"
-                  showHeader={false}
-                  columns={[
-                    {
-                      dataIndex: 'ten_hang',
-                      render: (v, r) => (
-                        <Input
-                          value={v}
-                          placeholder="Tên phí / dịch vụ (VD: Phí vận chuyển)"
-                          onChange={e => updateExtraLine(r.key, 'ten_hang', e.target.value)}
-                          size="small"
-                        />
-                      ),
-                    },
-                    {
-                      width: 150,
-                      dataIndex: 'don_gia',
-                      render: (v, r) => (
-                        <InputNumber
-                          value={v} min={0}
-                          formatter={val => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                          onChange={val => updateExtraLine(r.key, 'don_gia', val || 0)}
-                          size="small" style={{ width: '100%' }} addonAfter="đ"
-                        />
-                      ),
-                    },
-                    {
-                      width: 160,
-                      dataIndex: 'ghi_chu',
-                      render: (v, r) => (
-                        <Input
-                          value={v} placeholder="Ghi chú"
-                          onChange={e => updateExtraLine(r.key, 'ghi_chu', e.target.value)}
-                          size="small"
-                        />
-                      ),
-                    },
-                    {
-                      width: 40,
-                      render: (_, r) => (
-                        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeExtraLine(r.key)} />
-                      ),
-                    },
-                  ] as ColumnsType<ExtraLine>}
-                />
-              </>
-            )}
-
-            <Space style={{ marginTop: 8 }} wrap>
-              <Button size="small" icon={<CarOutlined />} onClick={() => addExtraLine({ ten_hang: 'Phí vận chuyển' })}>
-                + Phí vận chuyển
-              </Button>
-              <Button size="small" icon={<PlusOutlined />} onClick={() => addExtraLine()}>
-                + Phí / dịch vụ khác
-              </Button>
-            </Space>
 
             <Divider />
             <Row justify="end">

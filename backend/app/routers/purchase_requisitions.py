@@ -76,6 +76,25 @@ class YMHCreatePO(BaseModel):
     items_override: list[ItemPriceOverride] = []
 
 
+class NccGroupItem(BaseModel):
+    ymh_item_id: int
+    don_gia: Decimal
+
+
+class NccGroup(BaseModel):
+    supplier_id: int
+    item_ids: list[int]
+    don_gia_overrides: list[NccGroupItem] = []
+
+
+class YMHTaoPOTheoNCC(BaseModel):
+    ngay_po: date
+    ngay_du_kien_nhan: Optional[date] = None
+    dieu_khoan_tt: Optional[str] = None
+    ghi_chu: Optional[str] = None
+    groups: list[NccGroup]
+
+
 def _gen_so_ymh(db: Session) -> str:
     ym = datetime.now(timezone.utc).strftime("%Y%m")
     prefix = f"YMH-{ym}-"
@@ -192,6 +211,13 @@ def _serialize_ymh(ymh: PurchaseRequisition, db: Session) -> dict:
         ten_san_pham: str | None = None
         if it.san_pham_id and it.san_pham:
             ten_san_pham = it.san_pham.ten_hang or it.san_pham.ma_hang
+        supplier_id_goi_y: int | None = None
+        ten_ncc_goi_y: str | None = None
+        if it.tai_san_in_id and it.tai_san_in:
+            supplier_id_goi_y = it.tai_san_in.supplier_id
+            if it.tai_san_in.supplier:
+                s = it.tai_san_in.supplier
+                ten_ncc_goi_y = s.ten_viet_tat or s.ten_don_vi or s.ma_ncc
         items.append(
             {
                 "id": it.id,
@@ -207,6 +233,8 @@ def _serialize_ymh(ymh: PurchaseRequisition, db: Session) -> dict:
                 "san_pham_id": it.san_pham_id,
                 "ten_san_pham": ten_san_pham,
                 "tai_san_in_id": it.tai_san_in_id,
+                "supplier_id_goi_y": supplier_id_goi_y,
+                "ten_ncc_goi_y": ten_ncc_goi_y,
             }
         )
 
@@ -230,6 +258,17 @@ def _serialize_ymh(ymh: PurchaseRequisition, db: Session) -> dict:
         "ngay_duyet_gd": ymh.ngay_duyet_gd.isoformat() if ymh.ngay_duyet_gd else None,
         "po_id": ymh.po_id,
         "so_po_linked": db.get(PurchaseOrder, ymh.po_id).so_po if ymh.po_id else None,
+        "pos": [
+            {
+                "po_id": po.id,
+                "so_po": po.so_po,
+                "supplier_id": po.supplier_id,
+                "ten_ncc": (po.supplier.ten_viet_tat or po.supplier.ten_don_vi or po.supplier.ma_ncc) if po.supplier else None,
+                "tong_tien": float(po.tong_tien or 0),
+                "trang_thai": po.trang_thai,
+            }
+            for po in ymh.pos
+        ],
         "ghi_chu": ymh.ghi_chu,
         "ly_do_tu_choi": ymh.ly_do_tu_choi,
         "tong_du_kien": tong_du_kien,
@@ -565,8 +604,6 @@ def tao_po_tu_ymh(
         raise HTTPException(404, "Không tìm thấy YMH")
     if ymh.trang_thai != "duyet_gd":
         raise HTTPException(400, "Chỉ tạo PO từ YMH đã được GĐ duyệt")
-    if ymh.po_id:
-        raise HTTPException(400, "YMH này đã tạo PO")
     if not ymh.items:
         raise HTTPException(400, "YMH chưa có dòng hàng")
     if not db.get(Supplier, body.supplier_id):
@@ -592,6 +629,7 @@ def tao_po_tu_ymh(
         dieu_khoan_tt=body.dieu_khoan_tt,
         ghi_chu=body.ghi_chu or f"Tạo từ YMH {ymh.so_ymh}",
         created_by=current_user.id,
+        ymh_id=ymh.id,
     )
     db.add(po)
     db.flush()
@@ -631,6 +669,103 @@ def tao_po_tu_ymh(
     db.commit()
     db.refresh(po)
     return {"ok": True, "po_id": po.id, "so_po": po.so_po, "trang_thai": ymh.trang_thai}
+
+
+@router.post("/{ymh_id}/tao-po-theo-ncc")
+def tao_po_theo_ncc(
+    ymh_id: int,
+    body: YMHTaoPOTheoNCC,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ADMIN", "MUA_HANG_TRUONG_PHONG", "BGD_GIAM_DOC")),
+):
+    from app.models.tai_san_in import TaiSanIn as TaiSanInModel
+    ymh = db.get(PurchaseRequisition, ymh_id)
+    if not ymh:
+        raise HTTPException(404, "Không tìm thấy YMH")
+    if ymh.trang_thai != "duyet_gd":
+        raise HTTPException(400, "Chỉ tạo PO từ YMH đã được GĐ duyệt")
+    if not body.groups:
+        raise HTTPException(400, "Cần ít nhất 1 nhóm NCC")
+
+    item_map = {it.id: it for it in ymh.items}
+    seen_ids: set[int] = set()
+    for grp in body.groups:
+        if not db.get(Supplier, grp.supplier_id):
+            raise HTTPException(404, f"Nhà cung cấp {grp.supplier_id} không tồn tại")
+        for iid in grp.item_ids:
+            if iid not in item_map:
+                raise HTTPException(400, f"Item {iid} không thuộc YMH này")
+            if iid in seen_ids:
+                raise HTTPException(400, f"Item {iid} xuất hiện trong nhiều nhóm NCC")
+            seen_ids.add(iid)
+
+    created_pos = []
+    for grp in body.groups:
+        items_in_grp = [item_map[iid] for iid in grp.item_ids]
+        override_map = {x.ymh_item_id: x.don_gia for x in grp.don_gia_overrides}
+
+        loai_po = "ban_in_khuon_be"
+        has_paper = any(it.paper_material_id for it in items_in_grp)
+        has_other = any(it.other_material_id for it in items_in_grp)
+        has_free = any(not it.paper_material_id and not it.other_material_id for it in items_in_grp)
+        if has_paper and not has_other and not has_free:
+            loai_po = "giay_cuon"
+        elif has_other and not has_paper and not has_free:
+            loai_po = "nvl_khac"
+
+        po = PurchaseOrder(
+            so_po=_gen_so_po(db),
+            ngay_po=body.ngay_po,
+            supplier_id=grp.supplier_id,
+            phan_xuong_id=ymh.phan_xuong_id,
+            phap_nhan_id=ymh.phap_nhan_id,
+            loai_po=loai_po,
+            ngay_du_kien_nhan=body.ngay_du_kien_nhan,
+            dieu_khoan_tt=body.dieu_khoan_tt,
+            ghi_chu=body.ghi_chu or f"Tạo từ YMH {ymh.so_ymh}",
+            created_by=current_user.id,
+            ymh_id=ymh.id,
+        )
+        db.add(po)
+        db.flush()
+
+        tong_tien = Decimal("0")
+        for item in items_in_grp:
+            don_gia = override_map.get(item.id, item.don_gia_du_kien or Decimal("0"))
+            thanh_tien = item.so_luong * don_gia
+            tong_tien += thanh_tien
+            db.add(PurchaseOrderItem(
+                po_id=po.id,
+                paper_material_id=item.paper_material_id,
+                other_material_id=item.other_material_id,
+                ten_hang=item.ten_hang,
+                so_luong=item.so_luong,
+                dvt=item.dvt,
+                don_gia=don_gia,
+                thanh_tien=thanh_tien,
+                ghi_chu=item.ghi_chu,
+            ))
+            if item.tai_san_in_id:
+                ts = db.get(TaiSanInModel, item.tai_san_in_id)
+                if ts:
+                    ts.purchase_order_id = po.id
+
+        po.tong_tien = tong_tien
+        db.flush()
+        created_pos.append({
+            "po_id": po.id,
+            "so_po": po.so_po,
+            "supplier_id": grp.supplier_id,
+            "item_count": len(items_in_grp),
+        })
+
+    if seen_ids >= set(item_map.keys()):
+        ymh.trang_thai = "tao_po"
+        if not ymh.po_id and created_pos:
+            ymh.po_id = created_pos[0]["po_id"]
+
+    db.commit()
+    return {"ok": True, "pos": created_pos}
 
 
 @router.post("/{ymh_id}/huy")

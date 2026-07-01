@@ -1,8 +1,13 @@
+from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.purchase import PurchaseOrder
 
 
 class PurchaseRequisition(Base):
@@ -35,7 +40,10 @@ class PurchaseRequisition(Base):
     nguoi_yeu_cau = relationship("User", foreign_keys=[nguoi_yeu_cau_id])
     nguoi_duyet_pb = relationship("User", foreign_keys=[nguoi_duyet_pb_id])
     nguoi_duyet_gd = relationship("User", foreign_keys=[nguoi_duyet_gd_id])
-    po = relationship("PurchaseOrder")
+    po = relationship("PurchaseOrder", foreign_keys=[po_id])
+    pos: Mapped[list["PurchaseOrder"]] = relationship(
+        "PurchaseOrder", foreign_keys="[PurchaseOrder.ymh_id]", lazy="select"
+    )
     items: Mapped[list["PurchaseRequisitionItem"]] = relationship(
         "PurchaseRequisitionItem", back_populates="ymh", cascade="all, delete-orphan"
     )

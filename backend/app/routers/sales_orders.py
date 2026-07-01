@@ -49,6 +49,7 @@ from app.deps import get_current_user, get_admin_user, get_sale_visible_nv_ids, 
 from app.models.auth import User
 from app.models.master import Customer, Product
 from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
+from app.models.tai_san_in import TaiSanIn
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlanLine
 from app.services.sales_order_service import SalesOrderService
@@ -251,6 +252,8 @@ def create_order(
         order.items.append(item)
         tong_tien += float(item.thanh_tien)
 
+    # Cộng chi phí bản in / khuôn bế / vận chuyển vào tổng (nhất quán với báo giá)
+    tong_tien += float(data.chi_phi_bang_in or 0) + float(data.chi_phi_khuon or 0) + float(data.chi_phi_van_chuyen or 0)
     order.tong_tien = round(tong_tien, 2)
 
     # Tính tổng tiền sau giảm giá đơn hàng
@@ -264,6 +267,28 @@ def create_order(
     db.add(order)
     db.commit()
     db.refresh(order)
+
+    # Auto-tạo TaiSanIn khi có chi phí bản in / khuôn bế
+    def _next_ma(loai: str) -> str:
+        prefix = "BSI" if loai == "ban_in" else "KBE"
+        year = date.today().year
+        last = (db.query(TaiSanIn)
+                .filter(TaiSanIn.ma_tai_san.like(f"{prefix}-{year}-%"))
+                .order_by(TaiSanIn.id.desc()).first())
+        seq = int(last.ma_tai_san.split("-")[-1]) + 1 if last else 1
+        return f"{prefix}-{year}-{seq:03d}"
+
+    for loai, gia_tri in [("ban_in", data.chi_phi_bang_in), ("khuon_be", data.chi_phi_khuon)]:
+        if gia_tri and gia_tri > 0:
+            db.add(TaiSanIn(
+                ma_tai_san=_next_ma(loai),
+                loai=loai, gia_tri=gia_tri,
+                customer_id=data.customer_id, sales_order_thu_id=order.id,
+                trang_thai='cho_mua', nguoi_chi_tra='khach_hang',
+                user_id=current_user.id, ngay_tao=date.today(),
+            ))
+            db.commit()
+
     logger.info("created sales_order id=%s so_don=%s by user=%s", order.id, order.so_don, current_user.id)
     return get_order(order.id, db, current_user)
 
@@ -344,9 +369,10 @@ def update_order(
                 )
                 order.items.append(new_item)
 
-        # Tính lại tổng tiền
+        # Tính lại tổng tiền (items + chi phí)
         db.flush()
         tong_tien = sum(float(it.thanh_tien) for it in order.items)
+        tong_tien += float(order.chi_phi_bang_in or 0) + float(order.chi_phi_khuon or 0) + float(order.chi_phi_van_chuyen or 0)
         order.tong_tien = round(tong_tien, 2)
         if order.ty_le_giam_gia and order.ty_le_giam_gia > 0:
             order.tong_tien_sau_giam = order.tong_tien * (1 - order.ty_le_giam_gia / 100)
@@ -507,8 +533,9 @@ def update_discount(
     if ghi_chu is not None:
         order.ghi_chu = ghi_chu
 
-    # Tính lại tổng tiền
+    # Tính lại tổng tiền (items + chi phí)
     tong_tien_hang = sum((item.so_luong * item.don_gia for item in order.items), Decimal("0"))
+    tong_tien_hang += Decimal(str(order.chi_phi_bang_in or 0)) + Decimal(str(order.chi_phi_khuon or 0)) + Decimal(str(order.chi_phi_van_chuyen or 0))
     order.tong_tien = tong_tien_hang
 
     # Áp dụng giảm giá

@@ -324,6 +324,7 @@ export function calcBoxDimensions(
   ho_day: number | null | undefined = null,
 ): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number; kho_ke_hoach: number; dai_ke_hoach: number; kho_sx: number; dai_sx: number; hai_manh: boolean } | null {
   if (!loai_thung || !dai || !rong || !cao) return null
+  if (!Number.isFinite(dai) || !Number.isFinite(rong) || !Number.isFinite(cao)) return null
   const D = dai, R = rong, C = cao
   let kho1 = 0, dai1 = 0, dai_tt = 0
   let kho_ke_hoach = 0, dai_ke_hoach = 0
@@ -344,7 +345,9 @@ export function calcBoxDimensions(
 
   switch (loai_thung) {
     case 'A1': {
-      const _hoRed = ((ho_nap ?? 0) + (ho_day ?? 0)) / 2
+      const safeHoNap = Number.isFinite(ho_nap) ? (ho_nap as number) : 0
+      const safeHoDay = Number.isFinite(ho_day) ? (ho_day as number) : 0
+      const _hoRed = (safeHoNap + safeHoDay) / 2
       kho1 = R + C + 3 - _hoRed
       dai1 = (D + R) * 2 + 5
       dai_tt = so_lop === 7 ? (D + R) * 2 + 5 : (D + R) * 2 + 4

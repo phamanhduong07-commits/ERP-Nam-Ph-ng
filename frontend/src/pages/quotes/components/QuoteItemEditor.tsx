@@ -758,20 +758,20 @@ export default function QuoteItemEditor({
                   <Text style={{ fontSize: 11 }}>Hở nắp (cm)</Text>
                   <InputNumber size="small" style={{ width: '100%' }} min={0}
                     value={ci.ho_nap ?? undefined}
-                    onChange={v => setCI({ ho_nap: v ?? null })} />
+                    onChange={v => setCI({ ho_nap: (v != null && Number.isFinite(v)) ? v : null })} />
                 </Col>
                 <Col span={6}>
                   <Text style={{ fontSize: 11 }}>Hở đáy (cm)</Text>
                   <InputNumber size="small" style={{ width: '100%' }} min={0}
                     value={ci.ho_day ?? undefined}
-                    onChange={v => setCI({ ho_day: v ?? null })} />
+                    onChange={v => setCI({ ho_day: (v != null && Number.isFinite(v)) ? v : null })} />
                 </Col>
                 {ci.rong != null && (
                   <Col span={12} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 2 }}>
                     <Text style={{ fontSize: 10, color: '#888' }}>
-                      Cánh T: {((ci.rong / 2) - (ci.ho_nap ?? 0) / 2).toFixed(1)} cm
+                      Cánh T: {((ci.rong / 2) - (Number.isFinite(ci.ho_nap) ? (ci.ho_nap as number) : 0) / 2).toFixed(1)} cm
                       &nbsp;|&nbsp;
-                      Cánh D: {((ci.rong / 2) - (ci.ho_day ?? 0) / 2).toFixed(1)} cm
+                      Cánh D: {((ci.rong / 2) - (Number.isFinite(ci.ho_day) ? (ci.ho_day as number) : 0) / 2).toFixed(1)} cm
                     </Text>
                   </Col>
                 )}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal,
+  Alert, Button, Card, Col, DatePicker, Descriptions, Divider, Form, Input, InputNumber, Modal,
   Popconfirm, Row, Select, Space, Spin, Table, Tag, Typography, message,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -12,7 +12,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
-  PurchaseRequisition, TaoPoPayload, TRANG_THAI_YMH, TRANG_THAI_YMH_COLOR, ymhApi,
+  PurchaseRequisition, TaoPOTheoNCCPayload, TRANG_THAI_YMH, TRANG_THAI_YMH_COLOR, ymhApi,
 } from '../../api/purchase_requisitions'
 import { suppliersApi } from '../../api/suppliers'
 import type { ApiError } from '../../api/types'
@@ -37,14 +37,22 @@ function errMsg(e: unknown, fallback: string): string {
   return (e as ApiError)?.response?.data?.detail ?? fallback
 }
 
-// One editable row inside the "Tạo PO" price-override table.
-type PoLine = {
-  ymh_item_id: number | null   // YMH item id; null only for legacy rows missing an id (cannot override)
+// One editable row inside the "Tạo PO" group.
+type PoItem = {
+  ymh_item_id: number | null
   ten_hang: string
+  loai_item: string | undefined
   so_luong: number
   dvt: string
   ngay_can: string | null
-  don_gia: number              // editable, pre-filled from don_gia_du_kien
+  don_gia: number
+}
+
+// One NCC group in the new multi-PO modal.
+type PoGroup = {
+  key: string
+  supplier_id: number | null
+  items: PoItem[]
 }
 
 export default function YMHDetailPage() {
@@ -59,7 +67,7 @@ export default function YMHDetailPage() {
 
   // ── Local UI state ──
   const [poOpen, setPoOpen] = useState(false)
-  const [poLines, setPoLines] = useState<PoLine[]>([])
+  const [poGroups, setPoGroups] = useState<PoGroup[]>([])
   const [poNgayNhan, setPoNgayNhan] = useState<dayjs.Dayjs | null>(null)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -121,14 +129,14 @@ export default function YMHDetailPage() {
   })
 
   const taoPOMutation = useMutation({
-    mutationFn: (payload: TaoPoPayload) => ymhApi.taoPO(id, payload),
+    mutationFn: (payload: TaoPOTheoNCCPayload) => ymhApi.taoPOTheoNCC(id, payload),
     onSuccess: res => {
       invalidate()
       qc.invalidateQueries({ queryKey: ['purchase-orders'] })
-      message.success(`Đã tạo PO ${res.data.so_po}`)
+      const soPos = res.data.pos.map(p => p.so_po).join(', ')
+      message.success(`Đã tạo ${res.data.pos.length} PO: ${soPos}`)
       setPoOpen(false)
       poForm.resetFields()
-      navigate(ROUTE_ORDERS)
     },
     onError: (e: unknown) => message.error(errMsg(e, 'Lỗi tạo PO')),
   })
@@ -155,57 +163,80 @@ export default function YMHDetailPage() {
     }
   }
 
-  // ── Open Tạo PO modal: seed editable lines from the current YMH items ──
+  // ── Open Tạo PO modal: auto-group items by their suggested NCC ──
   function openPoModal() {
     if (!ymh) return
-    setPoLines(ymh.items.map(it => ({
-      ymh_item_id: it.id ?? null,
-      ten_hang: it.ten_hang,
-      so_luong: Number(it.so_luong || 0),
-      dvt: it.dvt,
-      ngay_can: it.ngay_can ?? null,
-      don_gia: Number(it.don_gia_du_kien || 0),
-    })))
+    const grouped = new Map<string, PoGroup>()
+    ymh.items.forEach(it => {
+      const sid = it.supplier_id_goi_y ?? null
+      const key = sid != null ? `ncc-${sid}` : `unassigned`
+      if (!grouped.has(key)) {
+        grouped.set(key, { key, supplier_id: sid, items: [] })
+      }
+      grouped.get(key)!.items.push({
+        ymh_item_id: it.id ?? null,
+        ten_hang: it.ten_hang,
+        loai_item: it.loai_item,
+        so_luong: Number(it.so_luong || 0),
+        dvt: it.dvt,
+        ngay_can: it.ngay_can ?? null,
+        don_gia: Number(it.don_gia_du_kien || 0),
+      })
+    })
+    setPoGroups(Array.from(grouped.values()))
     setPoNgayNhan(null)
     poForm.resetFields()
     poForm.setFieldsValue({ ngay_po: dayjs() })
     setPoOpen(true)
   }
 
-  function setLinePrice(index: number, value: number) {
-    setPoLines(prev => prev.map((l, i) => (i === index ? { ...l, don_gia: value } : l)))
+  function setGroupSupplier(key: string, sid: number | null) {
+    setPoGroups(prev => prev.map(g => g.key === key ? { ...g, supplier_id: sid } : g))
   }
 
-  const poTotal = useMemo(
-    () => poLines.reduce((sum, l) => sum + l.so_luong * (l.don_gia || 0), 0),
-    [poLines],
+  function setGroupItemPrice(groupKey: string, itemId: number | null, value: number) {
+    setPoGroups(prev => prev.map(g =>
+      g.key !== groupKey ? g : {
+        ...g,
+        items: g.items.map(it => it.ymh_item_id === itemId ? { ...it, don_gia: value } : it),
+      }
+    ))
+  }
+
+  const poGrandTotal = useMemo(
+    () => poGroups.reduce((sum, g) => sum + g.items.reduce((s, it) => s + it.so_luong * (it.don_gia || 0), 0), 0),
+    [poGroups],
   )
 
-  // Lines whose required date is earlier than the planned receive date — surfaced as a warning.
-  const earlyLines = useMemo(() => {
-    if (!poNgayNhan) return [] as PoLine[]
+  // Items whose required date is earlier than the planned receive date.
+  const earlyItems = useMemo(() => {
+    if (!poNgayNhan) return [] as PoItem[]
     const recv = poNgayNhan.startOf('day')
-    return poLines.filter(l => l.ngay_can && dayjs(l.ngay_can).startOf('day').isBefore(recv))
-  }, [poLines, poNgayNhan])
+    return poGroups.flatMap(g => g.items).filter(it => it.ngay_can && dayjs(it.ngay_can).startOf('day').isBefore(recv))
+  }, [poGroups, poNgayNhan])
 
   async function handleCreatePO() {
-    // Capture nullable state into a const before the await (avoids TS narrowing loss in async).
-    const current = ymh
-    if (!current) return
+    if (!ymh) return
     const values = await poForm.validateFields()
-    const itemsOverride = poLines
-      .filter((l): l is PoLine & { ymh_item_id: number } => l.ymh_item_id != null)
-      .map(l => ({ ymh_item_id: l.ymh_item_id, don_gia: Number(l.don_gia || 0) }))
-
-    const payload: TaoPoPayload = {
-      supplier_id: values.supplier_id,
+    const missingNCC = poGroups.filter(g => !g.supplier_id)
+    if (missingNCC.length > 0) {
+      message.error(`Còn ${missingNCC.length} nhóm chưa chọn nhà cung cấp`)
+      return
+    }
+    const payload: TaoPOTheoNCCPayload = {
       ngay_po: dayjs(values.ngay_po).format('YYYY-MM-DD'),
       ngay_du_kien_nhan: values.ngay_du_kien_nhan
         ? dayjs(values.ngay_du_kien_nhan).format('YYYY-MM-DD')
         : null,
       dieu_khoan_tt: values.dieu_khoan_tt ?? null,
       ghi_chu: values.ghi_chu ?? null,
-      items_override: itemsOverride,
+      groups: poGroups.map(g => ({
+        supplier_id: g.supplier_id!,
+        item_ids: g.items.filter(it => it.ymh_item_id != null).map(it => it.ymh_item_id!),
+        don_gia_overrides: g.items
+          .filter(it => it.ymh_item_id != null)
+          .map(it => ({ ymh_item_id: it.ymh_item_id!, don_gia: it.don_gia })),
+      })),
     }
     taoPOMutation.mutate(payload)
   }
@@ -218,6 +249,58 @@ export default function YMHDetailPage() {
   const actionBusy =
     submitMutation.isPending || duyetPBMutation.isPending || duyetGDMutation.isPending ||
     huyMutation.isPending || rejectMutation.isPending
+
+  // itemColumns has no dependency on ymh data — defined here so useColumnPrefs is called
+  // before the render guards (hooks must not follow conditional early returns, React rule).
+  const itemColumns: ColumnsType<PurchaseRequisition['items'][number]> = useMemo(() => [
+    { title: 'STT', width: 56, align: 'center', render: (_v: unknown, _r: unknown, i: number) => i + 1 },
+    {
+      title: 'Loại',
+      dataIndex: 'loai_item',
+      width: 90,
+      render: (v: string | null | undefined) => {
+        if (v === 'ban_in') return <Tag color="orange">Bản In</Tag>
+        if (v === 'khuon_be') return <Tag color="purple">Khuôn Bế</Tag>
+        if (v === 'muc_in') return <Tag color="magenta">Mực In</Tag>
+        if (v === 'dich_vu') return <Tag color="cyan">Dịch Vụ</Tag>
+        return <Tag>NVL</Tag>
+      },
+    },
+    {
+      title: 'NCC',
+      dataIndex: 'ten_ncc_goi_y',
+      width: 130,
+      ellipsis: true,
+      render: (v: string | null | undefined) =>
+        v ? <Tag color="geekblue" style={{ fontSize: 11 }}>{v}</Tag> : null,
+    },
+    {
+      title: 'Sản phẩm',
+      dataIndex: 'ten_san_pham',
+      width: 140,
+      ellipsis: true,
+      render: (v: string | null | undefined, r: PurchaseRequisition['items'][number]) =>
+        (r.loai_item === 'ban_in' || r.loai_item === 'khuon_be' || r.loai_item === 'muc_in') ? (v || '-') : null,
+    },
+    { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true, render: (v: string | null | undefined) => v || '-' },
+    { title: 'ĐVT', dataIndex: 'dvt', width: 70 },
+    { title: 'Số lượng', dataIndex: 'so_luong', width: 110, align: 'right', render: (v: number) => fmtVND(v) },
+    { title: 'Đơn giá DK', dataIndex: 'don_gia_du_kien', width: 130, align: 'right', render: (v: number) => fmtVND(v) },
+    {
+      title: 'Thành tiền',
+      width: 140,
+      align: 'right',
+      render: (_v: unknown, r: PurchaseRequisition['items'][number]) => <Text strong>{fmtVND((r.so_luong || 0) * (r.don_gia_du_kien || 0))}</Text>,
+    },
+    {
+      title: 'Ngày cần',
+      dataIndex: 'ngay_can',
+      width: 110,
+      render: (v: string | null | undefined) => (v ? dayjs(v).format('DD/MM/YYYY') : '-'),
+    },
+    { title: 'Ghi chú', dataIndex: 'ghi_chu', width: 160, render: (v: string | null | undefined) => v || '-' },
+  ], [])
+  const { displayColumns: displayItemColumns, settingsButton } = useColumnPrefs('purchase-ymh-detail', itemColumns)
 
   // ── Render guards ──
   if (!idValid) {
@@ -258,48 +341,6 @@ export default function YMHDetailPage() {
 
   // From here, `ymh` is a defined PurchaseRequisition.
   const st = ymh.trang_thai
-
-  const itemColumns: ColumnsType<PurchaseRequisition['items'][number]> = [
-    { title: 'STT', width: 56, align: 'center', render: (_v, _r, i) => i + 1 },
-    {
-      title: 'Loại',
-      dataIndex: 'loai_item',
-      width: 90,
-      render: (v: string | null | undefined) => {
-        if (v === 'ban_in') return <Tag color="orange">Bản In</Tag>
-        if (v === 'khuon_be') return <Tag color="purple">Khuôn Bế</Tag>
-        if (v === 'muc_in') return <Tag color="magenta">Mực In</Tag>
-        if (v === 'dich_vu') return <Tag color="cyan">Dịch Vụ</Tag>
-        return <Tag>NVL</Tag>
-      },
-    },
-    {
-      title: 'Sản phẩm',
-      dataIndex: 'ten_san_pham',
-      width: 140,
-      ellipsis: true,
-      render: (v: string | null | undefined, r: PurchaseRequisition['items'][number]) =>
-        (r.loai_item === 'ban_in' || r.loai_item === 'khuon_be' || r.loai_item === 'muc_in') ? (v || '-') : null,
-    },
-    { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true, render: v => v || '-' },
-    { title: 'ĐVT', dataIndex: 'dvt', width: 70 },
-    { title: 'Số lượng', dataIndex: 'so_luong', width: 110, align: 'right', render: (v: number) => fmtVND(v) },
-    { title: 'Đơn giá DK', dataIndex: 'don_gia_du_kien', width: 130, align: 'right', render: (v: number) => fmtVND(v) },
-    {
-      title: 'Thành tiền',
-      width: 140,
-      align: 'right',
-      render: (_v, r) => <Text strong>{fmtVND((r.so_luong || 0) * (r.don_gia_du_kien || 0))}</Text>,
-    },
-    {
-      title: 'Ngày cần',
-      dataIndex: 'ngay_can',
-      width: 110,
-      render: (v: string | null | undefined) => (v ? dayjs(v).format('DD/MM/YYYY') : '-'),
-    },
-    { title: 'Ghi chú', dataIndex: 'ghi_chu', width: 160, render: (v: string | null | undefined) => v || '-' },
-  ]
-  const { displayColumns: displayItemColumns, settingsButton } = useColumnPrefs('purchase-ymh-detail', itemColumns)
 
   const hasApprovalInfo =
     !!ymh.ten_nguoi_duyet_pb || !!ymh.ngay_duyet_pb ||
@@ -394,6 +435,37 @@ export default function YMHDetailPage() {
           )}
         />
       </Card>
+
+      {/* POs created from this YCMH */}
+      {(ymh.pos?.length ?? 0) > 0 && (
+        <Card title="Đơn mua hàng đã tạo" size="small" style={{ marginBottom: 16 }}>
+          <Table
+            rowKey="po_id"
+            dataSource={ymh.pos}
+            size="small"
+            pagination={false}
+            columns={[
+              {
+                title: 'Số PO',
+                dataIndex: 'so_po',
+                render: (v: string) => (
+                  <Button type="link" style={{ padding: 0 }} onClick={() => navigate(ROUTE_ORDERS)}>
+                    {v}
+                  </Button>
+                ),
+              },
+              { title: 'Nhà cung cấp', dataIndex: 'ten_ncc', ellipsis: true },
+              { title: 'Tổng tiền', dataIndex: 'tong_tien', align: 'right', width: 140, render: (v: number) => fmtVND(v) },
+              {
+                title: 'Trạng thái',
+                dataIndex: 'trang_thai',
+                width: 120,
+                render: (v: string) => <Tag>{v}</Tag>,
+              },
+            ]}
+          />
+        </Card>
+      )}
 
       {/* Approval history */}
       {hasApprovalInfo && (
@@ -501,30 +573,21 @@ export default function YMHDetailPage() {
         </Card>
       )}
 
-      {/* ── Tạo PO modal (enhanced: editable prices + early-deadline warning) ── */}
+      {/* ── Tạo PO modal — mỗi nhóm NCC tạo 1 PO riêng ── */}
       <Modal
         title={`Tạo PO từ ${ymh.so_ymh}`}
         open={poOpen}
         onCancel={() => { setPoOpen(false); poForm.resetFields() }}
         onOk={handleCreatePO}
         confirmLoading={taoPOMutation.isPending}
-        okText="Tạo PO"
+        okText={`Tạo ${poGroups.length} PO`}
         cancelText="Đóng"
-        width={860}
+        width={900}
         destroyOnClose
       >
         <Form form={poForm} layout="vertical" initialValues={{ ngay_po: dayjs() }}>
+          {/* Shared date/terms fields */}
           <Row gutter={12}>
-            <Col xs={24} md={12}>
-              <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn nhà cung cấp' }]}>
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Chọn nhà cung cấp"
-                  options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
-                />
-              </Form.Item>
-            </Col>
             <Col xs={12} md={6}>
               <Form.Item name="ngay_po" label="Ngày PO" rules={[{ required: true, message: 'Chọn ngày PO' }]}>
                 <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
@@ -532,38 +595,32 @@ export default function YMHDetailPage() {
             </Col>
             <Col xs={12} md={6}>
               <Form.Item name="ngay_du_kien_nhan" label="Ngày dự kiến nhận">
-                <DatePicker
-                  format="DD/MM/YYYY"
-                  style={{ width: '100%' }}
-                  onChange={v => setPoNgayNhan(v)}
-                />
+                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} onChange={v => setPoNgayNhan(v)} />
               </Form.Item>
             </Col>
-          </Row>
-          <Row gutter={12}>
-            <Col xs={24} md={12}>
-              <Form.Item name="dieu_khoan_tt" label="Điều khoản thanh toán">
+            <Col xs={24} md={6}>
+              <Form.Item name="dieu_khoan_tt" label="Điều khoản TT">
                 <Select allowClear placeholder="Chọn điều khoản" options={DIEU_KHOAN_OPTIONS} />
               </Form.Item>
             </Col>
-            <Col xs={24} md={12}>
+            <Col xs={24} md={6}>
               <Form.Item name="ghi_chu" label="Ghi chú">
-                <Input.TextArea rows={1} placeholder={`Tạo từ ${ymh.so_ymh}`} autoSize={{ minRows: 1, maxRows: 3 }} />
+                <Input placeholder={`Tạo từ ${ymh.so_ymh}`} />
               </Form.Item>
             </Col>
           </Row>
 
-          {earlyLines.length > 0 && (
+          {earlyItems.length > 0 && (
             <Alert
               type="warning"
               showIcon
               style={{ marginBottom: 12 }}
-              message={`Có ${earlyLines.length} dòng hàng cần sớm hơn ngày giao dự kiến:`}
+              message={`Có ${earlyItems.length} dòng cần sớm hơn ngày giao dự kiến`}
               description={
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  {earlyLines.map((l, i) => (
-                    <li key={l.ymh_item_id ?? `early-${i}`}>
-                      {l.ten_hang} — cần ngày {l.ngay_can ? dayjs(l.ngay_can).format('DD/MM/YYYY') : '-'}
+                  {earlyItems.map((it, i) => (
+                    <li key={it.ymh_item_id ?? `early-${i}`}>
+                      {it.ten_hang} — cần {it.ngay_can ? dayjs(it.ngay_can).format('DD/MM/YYYY') : '-'}
                     </li>
                   ))}
                 </ul>
@@ -571,53 +628,86 @@ export default function YMHDetailPage() {
             />
           )}
 
-          <Table<PoLine>
-            rowKey={(_r, i) => String(i)}
-            dataSource={poLines}
-            pagination={false}
-            size="small"
-            scroll={{ x: 620 }}
-            locale={{ emptyText: 'Không có dòng hàng' }}
-            columns={[
-              { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true, render: v => v || '-' },
-              { title: 'SL', dataIndex: 'so_luong', width: 90, align: 'right', render: (v: number) => fmtVND(v) },
-              { title: 'ĐVT', dataIndex: 'dvt', width: 64 },
-              {
-                title: 'Đơn giá',
-                width: 150,
-                align: 'right',
-                render: (_v, r, index) => (
-                  <InputNumber
-                    min={0}
-                    value={r.don_gia}
-                    onChange={val => setLinePrice(index, Number(val ?? 0))}
-                    style={{ width: '100%' }}
-                    formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    parser={v => Number((v ?? '').replace(/,/g, '')) as unknown as 0}
-                    disabled={r.ymh_item_id == null}
-                  />
-                ),
-              },
-              {
-                title: 'Thành tiền',
-                width: 140,
-                align: 'right',
-                render: (_v, r) => <Text strong>{fmtVND(r.so_luong * (r.don_gia || 0))}</Text>,
-              },
-            ]}
-            summary={() => (
-              <Table.Summary fixed>
-                <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={4} align="right">
-                    <Text strong>Tổng cộng</Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={1} align="right">
-                    <Text strong style={{ color: ACCENT }}>{fmtVND(poTotal)}</Text>
-                  </Table.Summary.Cell>
-                </Table.Summary.Row>
-              </Table.Summary>
-            )}
-          />
+          {/* One group per NCC */}
+          {poGroups.map((grp, gi) => {
+            const grpTotal = grp.items.reduce((s, it) => s + it.so_luong * (it.don_gia || 0), 0)
+            return (
+              <div key={grp.key}>
+                {gi > 0 && <Divider style={{ margin: '12px 0' }} />}
+                <Row gutter={12} align="middle" style={{ marginBottom: 8 }}>
+                  <Col flex="auto">
+                    <Text strong>Nhóm {gi + 1} — Nhà cung cấp:</Text>
+                    <Select
+                      showSearch
+                      optionFilterProp="label"
+                      placeholder="Chọn nhà cung cấp"
+                      value={grp.supplier_id}
+                      onChange={v => setGroupSupplier(grp.key, v)}
+                      style={{ width: 280, marginLeft: 8 }}
+                      options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
+                      status={grp.supplier_id ? undefined : 'error'}
+                    />
+                  </Col>
+                  <Col>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Tổng nhóm: <Text strong style={{ color: ACCENT }}>{fmtVND(grpTotal)}</Text>
+                    </Text>
+                  </Col>
+                </Row>
+                <Table<PoItem>
+                  rowKey={(_r, i) => `${grp.key}-${i}`}
+                  dataSource={grp.items}
+                  pagination={false}
+                  size="small"
+                  locale={{ emptyText: 'Không có dòng hàng' }}
+                  columns={[
+                    {
+                      title: 'Loại',
+                      dataIndex: 'loai_item',
+                      width: 90,
+                      render: (v: string) => {
+                        if (v === 'ban_in') return <Tag color="orange">Bản In</Tag>
+                        if (v === 'khuon_be') return <Tag color="purple">Khuôn Bế</Tag>
+                        if (v === 'muc_in') return <Tag color="magenta">Mực In</Tag>
+                        return <Tag>NVL</Tag>
+                      },
+                    },
+                    { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+                    { title: 'SL', dataIndex: 'so_luong', width: 80, align: 'right', render: (v: number) => fmtVND(v) },
+                    { title: 'ĐVT', dataIndex: 'dvt', width: 60 },
+                    {
+                      title: 'Đơn giá',
+                      width: 150,
+                      align: 'right',
+                      render: (_v, r) => (
+                        <InputNumber
+                          min={0}
+                          value={r.don_gia}
+                          onChange={val => setGroupItemPrice(grp.key, r.ymh_item_id, Number(val ?? 0))}
+                          style={{ width: '100%' }}
+                          formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                          parser={v => Number((v ?? '').replace(/,/g, '')) as unknown as 0}
+                          disabled={r.ymh_item_id == null}
+                        />
+                      ),
+                    },
+                    {
+                      title: 'Thành tiền',
+                      width: 130,
+                      align: 'right',
+                      render: (_v, r) => <Text strong>{fmtVND(r.so_luong * (r.don_gia || 0))}</Text>,
+                    },
+                  ]}
+                />
+              </div>
+            )
+          })}
+
+          {/* Grand total */}
+          <div style={{ textAlign: 'right', marginTop: 12, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+            <Text>Tổng cộng tất cả PO: </Text>
+            <Text strong style={{ color: ACCENT, fontSize: 15 }}>{fmtVND(poGrandTotal)}</Text>
+          </div>
         </Form>
       </Modal>
 
