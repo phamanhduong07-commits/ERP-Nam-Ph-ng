@@ -9,7 +9,7 @@ import {
 } from 'antd'
 import {
   CalculatorOutlined, SaveOutlined, CaretRightOutlined,
-  CheckCircleOutlined, PrinterOutlined,
+  CheckCircleOutlined, PrinterOutlined, FileProtectOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -444,6 +444,14 @@ export default function BomCalculatorPanel({
     },
   })
 
+  const saveAsTemplateMutation = useMutation({
+    mutationFn: (bomId: number) => bomApi.saveAsTemplate(bomId),
+    onSuccess: () => message.success('Đã lưu làm BOM mẫu. Lần sau mở LSX cùng sản phẩm sẽ tự điền.'),
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi lưu BOM mẫu')
+    },
+  })
+
   useEffect(() => {
     const bom = existingBomQuery.data
     if (!bom || hasPrefilledRef.current) return
@@ -567,6 +575,15 @@ export default function BomCalculatorPanel({
     setCanMang(spec.can_mang as 0 | 1 | 2)
     setSanPhamKho(spec.san_pham_kho)
 
+    // Pricing — chỉ có khi nguồn là BOM mẫu sản phẩm
+    if (spec.source === 'product_template') {
+      if (spec.ty_le_loi_nhuan != null) setTyLeLN(Number(spec.ty_le_loi_nhuan) * 100)
+      if (spec.hoa_hong_kd_pct != null) setHoaHongKDPct(Number(spec.hoa_hong_kd_pct) * 100)
+      if (spec.hoa_hong_kh_pct != null) setHoaHongKHPct(Number(spec.hoa_hong_kh_pct) * 100)
+      if (spec.chi_phi_khac != null) setChiPhiKhac(Number(spec.chi_phi_khac))
+      if (spec.chiet_khau != null) setChietKhau(Number(spec.chiet_khau))
+    }
+
     const layerKeys: LayerKey[] = ['mat', 'song_1', 'mat_1', 'song_2', 'mat_2', 'song_3', 'mat_3']
     const newLayers: Record<LayerKey, BomLayerInput> = {
       mat: emptyLayer(), song_1: emptyLayer(), mat_1: emptyLayer(),
@@ -612,11 +629,12 @@ export default function BomCalculatorPanel({
         ghim: spec.ghim ?? false,
         can_mang: spec.can_mang as 0 | 1 | 2,
         san_pham_kho: spec.san_pham_kho,
-        ty_le_loi_nhuan: undefined,
-        hoa_hong_kd_pct: 0,
-        hoa_hong_kh_pct: 0,
-        chi_phi_khac: 0,
-        chiet_khau: 0,
+        ty_le_loi_nhuan: spec.source === 'product_template' && spec.ty_le_loi_nhuan != null
+          ? spec.ty_le_loi_nhuan : undefined,
+        hoa_hong_kd_pct: spec.source === 'product_template' ? (spec.hoa_hong_kd_pct ?? 0) : 0,
+        hoa_hong_kh_pct: spec.source === 'product_template' ? (spec.hoa_hong_kh_pct ?? 0) : 0,
+        chi_phi_khac: spec.source === 'product_template' ? (spec.chi_phi_khac ?? 0) : 0,
+        chiet_khau: spec.source === 'product_template' ? (spec.chiet_khau ?? 0) : 0,
       })
     }
   }, [quoteSpecQuery.data, existingBomQuery.isLoading, existingBomQuery.isSuccess, initialValues]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -813,7 +831,12 @@ export default function BomCalculatorPanel({
       {/* Badge nguồn dữ liệu khi không có BOM lưu */}
       {!existingBomQuery.data && quoteSpecQuery.data && !quoteSpecQuery.isLoading && (
         <Alert
-          type={quoteSpecQuery.data.source === 'quote' ? 'success' : quoteSpecQuery.data.source === 'cau_truc' ? 'warning' : 'info'}
+          type={
+            quoteSpecQuery.data.source === 'quote' ? 'success'
+            : quoteSpecQuery.data.source === 'cau_truc' ? 'warning'
+            : quoteSpecQuery.data.source === 'product_template' ? 'success'
+            : 'info'
+          }
           showIcon
           style={{ marginBottom: 12 }}
           message={
@@ -821,6 +844,10 @@ export default function BomCalculatorPanel({
               ? 'Đã tải quy cách từ báo giá'
               : quoteSpecQuery.data.source === 'cau_truc'
               ? 'Đã tải kết cấu thông dụng (không có báo giá liên kết)'
+              : quoteSpecQuery.data.source === 'product_template'
+              ? 'Đã tải BOM mẫu của sản phẩm (kết cấu + giá)'
+              : quoteSpecQuery.data.source === 'sx_params'
+              ? 'Đã tải thông số SX mặc định — cần nhập đơn giá giấy'
               : 'Chỉ có kích thước từ danh mục — cần nhập kết cấu giấy'
           }
         />
@@ -1507,6 +1534,16 @@ export default function BomCalculatorPanel({
               >
                 {savedBomId ? `Lưu lại (đã lưu #${savedBomId})` : 'Lưu hoạch toán'}
               </Button>
+              {savedBomId && (
+                <Button
+                  icon={<FileProtectOutlined />}
+                  loading={saveAsTemplateMutation.isPending}
+                  onClick={() => saveAsTemplateMutation.mutate(savedBomId)}
+                  style={{ marginTop: 6, minWidth: 220 }}
+                >
+                  Lưu làm mẫu cho sản phẩm
+                </Button>
+              )}
             </Space>
           </Card>}
         </>

@@ -180,6 +180,8 @@ export interface BomSavedIndirectItem {
 export interface BomSaved {
   id: number
   production_order_item_id: number | null
+  product_id?: number | null
+  la_mau_san_pham?: boolean
   loai_thung: string
   dai: number
   rong: number
@@ -310,7 +312,7 @@ export const addonRatesApi = {
 
 // Quy cách sản phẩm từ báo giá (để auto-fill BOM calculator)
 export interface QuoteSpec {
-  source: 'quote' | 'cau_truc' | 'product'
+  source: 'quote' | 'cau_truc' | 'product' | 'product_template' | 'sx_params'
   quote_item_id: number | null
   loai_thung: string
   dai: number | null
@@ -331,6 +333,12 @@ export interface QuoteSpec {
   ghim: boolean
   can_mang: number
   san_pham_kho: boolean
+  // Pricing — chỉ có khi source = 'product_template'
+  ty_le_loi_nhuan?: number | null
+  hoa_hong_kd_pct?: number
+  hoa_hong_kh_pct?: number
+  chi_phi_khac?: number
+  chiet_khau?: number
 }
 
 // ─── Pending BOM items (LSX without confirmed BOM) ───────────────────────────
@@ -419,6 +427,12 @@ export const bomApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+
+  saveAsTemplate: (bomId: number) =>
+    client.post<BomSaved>(`/bom/${bomId}/save-as-template`),
+
+  getProductTemplate: (productId: number) =>
+    client.get<BomSaved>(`/bom/template/${productId}`),
 }
 
 // ─── Display helpers ──────────────────────────────────────────────────────────

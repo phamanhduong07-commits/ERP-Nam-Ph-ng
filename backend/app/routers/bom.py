@@ -223,6 +223,8 @@ def _bom_to_response(bom: ProductionBOM) -> BomResponse:
     return BomResponse(
         id=bom.id,
         production_order_item_id=bom.production_order_item_id,
+        product_id=bom.product_id,
+        la_mau_san_pham=bom.la_mau_san_pham,
         loai_thung=bom.loai_thung,
         dai=bom.dai,
         rong=bom.rong,
@@ -1047,6 +1049,8 @@ def get_quote_spec(
 
     Ưu tiên nguồn dữ liệu:
       1. QuoteItem liên kết (qua chuỗi POItem → SOItem → QuoteItem)
+      1b. BOM mẫu của sản phẩm (product_template)
+      1c. sx_params_mac_dinh của sản phẩm (layers + GSM, không có giá)
       2. CauTrucThongDung khớp so_lop
       3. Chỉ trả kích thước từ Product (không có kết cấu giấy)
 
@@ -1118,6 +1122,89 @@ def get_quote_spec(
             "can_mang": _parse_mat_field(getattr(_src, 'can_man', None)),
             "san_pham_kho": bool(getattr(_src, 'do_kho', False)),
         }
+
+    # ── Nguồn 1b: BOM mẫu của sản phẩm ──────────────────────────────────────────
+    if product:
+        template_bom = (
+            db.query(ProductionBOM)
+            .filter(
+                ProductionBOM.product_id == product.id,
+                ProductionBOM.la_mau_san_pham == True,
+            )
+            .order_by(ProductionBOM.updated_at.desc())
+            .first()
+        )
+        if template_bom and _has_paper_data(template_bom):
+            _default_ths = {3: 'B', 5: 'BC', 7: 'BCB'}
+            tmpl_so_lop = template_bom.so_lop or so_lop
+            tmpl_to_hop = template_bom.to_hop_song or _default_ths.get(tmpl_so_lop, 'B')
+            return {
+                "source": "product_template",
+                "quote_item_id": None,
+                "loai_thung": template_bom.loai_thung or "A1",
+                "dai": float(template_bom.dai),
+                "rong": float(template_bom.rong),
+                "cao": float(template_bom.cao),
+                "so_lop": tmpl_so_lop,
+                "to_hop_song": tmpl_to_hop,
+                "so_luong": float(poi.so_luong_ke_hoach),
+                "layers": _build_layers(tmpl_so_lop, tmpl_to_hop, _raw_pairs_from_object(template_bom)),
+                "chong_tham": template_bom.chong_tham,
+                "in_flexo_mau": template_bom.in_flexo_mau,
+                "in_flexo_phu_nen": template_bom.in_flexo_phu_nen,
+                "in_ky_thuat_so": template_bom.in_ky_thuat_so,
+                "chap_xa": template_bom.chap_xa,
+                "boi": template_bom.boi,
+                "be_so_con": template_bom.be_so_con,
+                "dan": template_bom.dan,
+                "ghim": template_bom.ghim,
+                "can_mang": template_bom.can_mang,
+                "san_pham_kho": template_bom.san_pham_kho,
+                "ty_le_loi_nhuan": float(template_bom.ty_le_loi_nhuan) if template_bom.ty_le_loi_nhuan else None,
+                "hoa_hong_kd_pct": float(template_bom.hoa_hong_kd_pct),
+                "hoa_hong_kh_pct": float(template_bom.hoa_hong_kh_pct),
+                "chi_phi_khac": float(template_bom.chi_phi_khac),
+                "chiet_khau": float(template_bom.chiet_khau),
+            }
+
+    # ── Nguồn 1c: sx_params_mac_dinh của sản phẩm ────────────────────────────
+    if product and product.sx_params_mac_dinh:
+        p = product.sx_params_mac_dinh
+        if p.get('mat') or p.get('song_1'):
+            _default_ths = {3: 'B', 5: 'BC', 7: 'BCB'}
+            p_to_hop = p.get('to_hop_song') or _default_ths.get(so_lop, 'B')
+            raw_pairs = [
+                (p.get('mat'), p.get('mat_dl')),
+                (p.get('song_1'), p.get('song_1_dl')),
+                (p.get('mat_1'), p.get('mat_1_dl')),
+                (p.get('song_2'), p.get('song_2_dl')),
+                (p.get('mat_2'), p.get('mat_2_dl')),
+                (p.get('song_3'), p.get('song_3_dl')),
+                (p.get('mat_3'), p.get('mat_3_dl')),
+            ]
+            return {
+                "source": "sx_params",
+                "quote_item_id": None,
+                "loai_thung": getattr(product, 'loai_thung', None) or "A1",
+                "dai": float(product.dai) if product.dai else None,
+                "rong": float(product.rong) if product.rong else None,
+                "cao": float(product.cao) if product.cao else None,
+                "so_lop": so_lop,
+                "to_hop_song": p_to_hop,
+                "so_luong": float(poi.so_luong_ke_hoach),
+                "layers": _build_layers(so_lop, p_to_hop, raw_pairs),
+                "chong_tham": 0,
+                "in_flexo_mau": (product.so_mau or 0),
+                "in_flexo_phu_nen": False,
+                "in_ky_thuat_so": False,
+                "chap_xa": False,
+                "boi": False,
+                "be_so_con": 0,
+                "dan": False,
+                "ghim": False,
+                "can_mang": 0,
+                "san_pham_kho": False,
+            }
 
     # ── Nguồn 2: CauTrucThongDung khớp so_lop ─────────────────────────────────
     cau_truc: CauTrucThongDung | None = (
@@ -1413,6 +1500,68 @@ def confirm_bom(
     _populate_khau_costs_from_bom(bom, db)
     db.commit()
     return _bom_to_response(_load_bom(bom_id, db))
+
+
+# ─── BOM mẫu sản phẩm ────────────────────────────────────────────────────────
+
+@router.post("/{bom_id}/save-as-template", response_model=BomResponse)
+def save_bom_as_template(
+    bom_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Lưu BOM này làm mẫu cho sản phẩm liên kết."""
+    bom = db.query(ProductionBOM).filter(ProductionBOM.id == bom_id).first()
+    if not bom:
+        raise HTTPException(status_code=404, detail="Không tìm thấy BOM")
+
+    # Resolve product_id từ BOM hoặc từ POI
+    product_id = bom.product_id
+    if not product_id and bom.production_order_item_id:
+        poi = db.query(ProductionOrderItem).filter(
+            ProductionOrderItem.id == bom.production_order_item_id
+        ).first()
+        if poi:
+            product_id = poi.product_id
+
+    if not product_id:
+        raise HTTPException(
+            status_code=422,
+            detail="BOM này chưa liên kết với sản phẩm. Vui lòng liên kết mã hàng cho lệnh SX trước."
+        )
+
+    # Clear template cũ
+    db.query(ProductionBOM).filter(
+        ProductionBOM.product_id == product_id,
+        ProductionBOM.la_mau_san_pham == True,
+        ProductionBOM.id != bom_id,
+    ).update({"la_mau_san_pham": False}, synchronize_session=False)
+
+    bom.product_id = product_id
+    bom.la_mau_san_pham = True
+    db.commit()
+    return _bom_to_response(_load_bom(bom_id, db))
+
+
+@router.get("/template/{product_id}", response_model=BomResponse)
+def get_product_bom_template(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Lấy BOM mẫu của sản phẩm."""
+    bom = (
+        db.query(ProductionBOM)
+        .filter(
+            ProductionBOM.product_id == product_id,
+            ProductionBOM.la_mau_san_pham == True,
+        )
+        .order_by(ProductionBOM.updated_at.desc())
+        .first()
+    )
+    if not bom:
+        raise HTTPException(status_code=404, detail="Sản phẩm chưa có BOM mẫu")
+    return _bom_to_response(_load_bom(bom.id, db))
 
 
 # ─── Reverse calculation ──────────────────────────────────────────────────────

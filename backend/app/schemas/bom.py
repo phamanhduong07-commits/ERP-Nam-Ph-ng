@@ -205,6 +205,8 @@ class BomItemResponse(BaseModel):
 class BomResponse(BaseModel):
     id: int
     production_order_item_id: int | None
+    product_id: int | None = None
+    la_mau_san_pham: bool = False
 
     # Product specs
     loai_thung: str

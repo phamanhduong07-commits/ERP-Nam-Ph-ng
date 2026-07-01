@@ -20,6 +20,12 @@ class ProductionBOM(Base):
         nullable=True, index=True,
     )
 
+    # Liên kết sản phẩm (để làm BOM mẫu)
+    product_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True
+    )
+    la_mau_san_pham: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     # ---- Thông số sản phẩm ----
     loai_thung: Mapped[str] = mapped_column(String(30), nullable=False)  # A1/A3/A5/tam
     dai: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
@@ -115,6 +121,9 @@ class ProductionBOM(Base):
     # ---- Relationships ----
     production_order_item: Mapped["ProductionOrderItem | None"] = relationship(  # type: ignore[name-defined]
         "ProductionOrderItem", foreign_keys=[production_order_item_id]
+    )
+    product: Mapped["Product | None"] = relationship(  # type: ignore[name-defined]
+        "Product", foreign_keys=[product_id]
     )
     creator: Mapped["User | None"] = relationship(  # type: ignore[name-defined]
         "User", foreign_keys=[created_by]

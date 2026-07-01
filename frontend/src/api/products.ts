@@ -85,6 +85,7 @@ export interface ProductFull extends Product {
   tem_khac_thiet_ke: boolean
   ten_khach_hang?: string
   created_at: string
+  sx_params_mac_dinh?: import('./productionOrders').SxParamsMacDinh | null
 }
 
 export type ProductFullCreate = Omit<ProductFull, 'id' | 'ten_khach_hang' | 'created_at'>

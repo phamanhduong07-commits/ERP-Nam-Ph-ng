@@ -5,12 +5,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
   Select, Tag, message, Typography, Row, Col, Switch, Tabs, Checkbox,
+  Alert, Spin, Descriptions,
 } from 'antd'
 import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { productsApi as productsFullApi, type ProductFull, type ProductFullCreate } from '../../api/products'
 import { customersApi } from '../../api/customers'
 import { LOAI_THUNG_OPTIONS, LOAI_BE_OPTIONS, TO_HOP_SONG_OPTIONS } from '../../api/quotes'
+import { bomApi, vnd } from '../../api/bom'
+import type { SxParamsMacDinh } from '../../api/productionOrders'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
@@ -66,6 +69,121 @@ const LOAI_THUNG_GROUPED = [
   { label: 'Khay',  options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Khay') },
 ]
 
+// ─── BOM mẫu tab (read-only, hiển thị trong modal edit sản phẩm) ─────────────
+
+const PAPER_LAYER_LABELS: Array<{ key: keyof SxParamsMacDinh; dlKey: keyof SxParamsMacDinh; label: string }> = [
+  { key: 'mat',    dlKey: 'mat_dl',    label: 'Mặt ngoài' },
+  { key: 'song_1', dlKey: 'song_1_dl', label: 'Sóng 1' },
+  { key: 'mat_1',  dlKey: 'mat_1_dl',  label: 'Mặt 1' },
+  { key: 'song_2', dlKey: 'song_2_dl', label: 'Sóng 2' },
+  { key: 'mat_2',  dlKey: 'mat_2_dl',  label: 'Mặt 2' },
+  { key: 'song_3', dlKey: 'song_3_dl', label: 'Sóng 3' },
+  { key: 'mat_3',  dlKey: 'mat_3_dl',  label: 'Mặt trong' },
+]
+
+interface BomMauTabProps {
+  productId: number
+  sxParams: SxParamsMacDinh | null
+  bomMau: import('../../api/bom').BomSaved | null
+  loading: boolean
+}
+
+function BomMauTab({ sxParams, bomMau, loading }: BomMauTabProps) {
+  const layers = sxParams
+    ? PAPER_LAYER_LABELS.filter(l => sxParams[l.key])
+    : []
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Section 1 — Thông số SX mặc định */}
+      <div>
+        <Typography.Text strong style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>
+          Thông số SX mặc định
+        </Typography.Text>
+        {!sxParams ? (
+          <Alert type="info" showIcon message="Chưa có thông số SX. Mở LSX → tab Thông số SX → Lưu làm mặc định." />
+        ) : (
+          <>
+            <Descriptions size="small" bordered column={3} style={{ marginBottom: 8 }}>
+              <Descriptions.Item label="Tổ hợp sóng">{sxParams.to_hop_song || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Khổ TT (mm)">{sxParams.kho_tt ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="Dài TT (mm)">{sxParams.dai_tt ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="Bế số con">{sxParams.be_so_con ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="QCCL" span={2}>{sxParams.qccl || '—'}</Descriptions.Item>
+            </Descriptions>
+            {layers.length > 0 && (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#f5f5f5' }}>
+                    <th style={{ border: '1px solid #e8e8e8', padding: '4px 8px', textAlign: 'left' }}>Lớp</th>
+                    <th style={{ border: '1px solid #e8e8e8', padding: '4px 8px' }}>Mã giấy</th>
+                    <th style={{ border: '1px solid #e8e8e8', padding: '4px 8px' }}>ĐL (g/m²)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {layers.map(l => (
+                    <tr key={l.key}>
+                      <td style={{ border: '1px solid #e8e8e8', padding: '4px 8px' }}>{l.label}</td>
+                      <td style={{ border: '1px solid #e8e8e8', padding: '4px 8px', textAlign: 'center' }}>
+                        {String(sxParams[l.key] ?? '')}
+                      </td>
+                      <td style={{ border: '1px solid #e8e8e8', padding: '4px 8px', textAlign: 'center' }}>
+                        {sxParams[l.dlKey] != null ? Number(sxParams[l.dlKey]) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Section 2 — BOM mẫu (giá + add-ons + tỉ lệ) */}
+      <div>
+        <Typography.Text strong style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>
+          BOM mẫu (giá thành &amp; gia công)
+        </Typography.Text>
+        {loading ? (
+          <Spin size="small" />
+        ) : !bomMau ? (
+          <Alert
+            type="info"
+            showIcon
+            message="Chưa có BOM mẫu"
+            description="Mở LSX của sản phẩm này → tính BOM → bấm Lưu làm mẫu cho sản phẩm."
+          />
+        ) : (
+          <>
+            <Descriptions size="small" bordered column={3}>
+              <Descriptions.Item label="Giá giấy">{bomMau.chi_phi_giay != null ? vnd(Number(bomMau.chi_phi_giay)) : '—'}</Descriptions.Item>
+              <Descriptions.Item label="Chi phí gián tiếp">{bomMau.chi_phi_gian_tiep != null ? vnd(Number(bomMau.chi_phi_gian_tiep)) : '—'}</Descriptions.Item>
+              <Descriptions.Item label="Chi phí gia công">{bomMau.chi_phi_addon != null ? vnd(Number(bomMau.chi_phi_addon)) : '—'}</Descriptions.Item>
+              <Descriptions.Item label="Giá bán cuối">{bomMau.gia_ban_cuoi != null ? vnd(Number(bomMau.gia_ban_cuoi)) : '—'}</Descriptions.Item>
+              <Descriptions.Item label="Tỉ lệ LN">
+                {bomMau.ty_le_loi_nhuan != null ? `${(Number(bomMau.ty_le_loi_nhuan) * 100).toFixed(1)}%` : '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="HH KD / KH">
+                {`${(Number(bomMau.hoa_hong_kd_pct) * 100).toFixed(1)}% / ${(Number(bomMau.hoa_hong_kh_pct) * 100).toFixed(1)}%`}
+              </Descriptions.Item>
+            </Descriptions>
+            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+              Gia công: chống thấm={bomMau.chong_tham || 'không'}
+              {bomMau.in_flexo_mau > 0 && ` · in flexo ${bomMau.in_flexo_mau} màu`}
+              {bomMau.boi && ' · bồi'}
+              {bomMau.chap_xa && ' · chấp xà'}
+              {bomMau.dan && ' · dán'}
+              {bomMau.ghim && ' · ghim'}
+              {bomMau.be_so_con > 0 && ` · bế ${bomMau.be_so_con} con`}
+              {bomMau.can_mang > 0 && ` · cán màng ${bomMau.can_mang} mặt`}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ProductList() {
   const queryClient = useQueryClient()
   const { hasPermission } = usePermission()
@@ -94,6 +212,13 @@ export default function ProductList() {
   const { data: khList = [] } = useQuery({
     queryKey: ['customers-all'],
     queryFn: () => customersApi.all().then(r => r.data),
+  })
+
+  const { data: bomMau, isLoading: bomMauLoading } = useQuery({
+    queryKey: ['product-bom-template', editing?.id],
+    queryFn: () => bomApi.getProductTemplate(editing!.id).then(r => r.data),
+    enabled: !!editing?.id,
+    retry: false,
   })
 
   const createMut = useMutation({
@@ -730,6 +855,20 @@ export default function ProductList() {
                     <Col span={4}><Form.Item label="Khắc thiết kế" name="tem_khac_thiet_ke" valuePropName="checked"><Switch /></Form.Item></Col>
                   </Row>
                 </>
+              ),
+            },
+            {
+              key: '6',
+              label: 'BOM mẫu',
+              children: editing ? (
+                <BomMauTab
+                  productId={editing.id}
+                  sxParams={(editing.sx_params_mac_dinh as SxParamsMacDinh | null) ?? null}
+                  bomMau={bomMau ?? null}
+                  loading={bomMauLoading}
+                />
+              ) : (
+                <Alert type="info" message="Lưu sản phẩm trước để xem BOM mẫu." showIcon />
               ),
             },
           ]} />
